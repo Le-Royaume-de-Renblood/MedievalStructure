@@ -1,0 +1,1 @@
+Placez le fichier medieval_coins-1.0.0.jar ici pour que la dépendance soit trouvée par Gradle via flatDir.

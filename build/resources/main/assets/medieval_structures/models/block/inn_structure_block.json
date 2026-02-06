@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "medieval_structures:block/inn_structure_block"
+  }
+}

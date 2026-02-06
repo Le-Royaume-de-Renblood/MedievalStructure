@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "medieval_structures:block/inn_structure_block"
+    }
+  }
+}

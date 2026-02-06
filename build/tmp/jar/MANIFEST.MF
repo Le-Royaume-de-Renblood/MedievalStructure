@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Specification-Title: medieval_structures
+Specification-Vendor: Yololaxe
+Specification-Version: 1
+Implementation-Title: MedievalStructures
+Implementation-Version: 0.1
+Implementation-Vendor: Yololaxe
+Implementation-Timestamp: 2026-02-05T14:15:22+0100
+
