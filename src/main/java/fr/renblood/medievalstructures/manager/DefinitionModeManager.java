@@ -1,10 +1,12 @@
 package fr.renblood.medievalstructures.manager;
 
+import fr.renblood.medievalstructures.block.entity.InnStructureBlockEntity;
 import fr.renblood.medievalstructures.network.PacketHandler;
 import fr.renblood.medievalstructures.network.PacketSyncDefinitionMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.network.PacketDistributor;
 
@@ -36,6 +38,10 @@ public class DefinitionModeManager {
 
     public boolean isInDefinitionMode(Player player) {
         return playersInDefinitionMode.containsKey(player.getUUID());
+    }
+
+    public BlockPos getStructurePos(Player player) {
+        return playersInDefinitionMode.get(player.getUUID());
     }
 
     public void setPoint1(Player player, BlockPos pos) {
@@ -72,8 +78,15 @@ public class DefinitionModeManager {
             BlockPos pos2 = point2.get(playerUUID);
             BlockPos structureBlockPos = playersInDefinitionMode.get(playerUUID);
 
-            // TODO: Sauvegarder la structure ou faire l'action finale
-            player.sendSystemMessage(Component.literal("Structure validée avec succès ! Zone : " + pos1 + " à " + pos2));
+            // Sauvegarde du volume dans le TileEntity
+            BlockEntity be = player.level().getBlockEntity(structureBlockPos);
+            if (be instanceof InnStructureBlockEntity innBe) {
+                innBe.setVolume(pos1, pos2);
+                player.sendSystemMessage(Component.literal("Zone validée !"));
+                player.sendSystemMessage(Component.literal("Maintenant, liez ce bloc à une auberge avec /auberge link <nom> en regardant le bloc."));
+            } else {
+                player.sendSystemMessage(Component.literal("Erreur: Impossible de trouver le bloc de structure."));
+            }
 
             leaveDefinitionMode(player);
         } else {
@@ -96,12 +109,19 @@ public class DefinitionModeManager {
         }
     }
 
-    private void syncToClient(Player player) {
+    public void syncToClient(Player player) {
         if (player instanceof ServerPlayer serverPlayer) {
             boolean inMode = isInDefinitionMode(player);
             BlockPos p1 = point1.get(player.getUUID());
             BlockPos p2 = point2.get(player.getUUID());
             PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> serverPlayer), new PacketSyncDefinitionMode(inMode, p1, p2));
+        }
+    }
+
+    public void onStructureBlockBroken(BlockPos pos, ServerPlayer player) {
+        if (isInDefinitionMode(player) && playersInDefinitionMode.get(player.getUUID()).equals(pos)) {
+            leaveDefinitionMode(player);
+            player.sendSystemMessage(Component.literal("Configuration annulée car le bloc a été détruit."));
         }
     }
 }

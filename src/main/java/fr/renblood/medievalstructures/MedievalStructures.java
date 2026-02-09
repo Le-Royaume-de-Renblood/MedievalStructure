@@ -2,12 +2,13 @@ package fr.renblood.medievalstructures;
 
 import com.mojang.logging.LogUtils;
 import fr.renblood.medievalstructures.command.ModCommands;
-import fr.renblood.medievalstructures.init.ModBlocks;
-import fr.renblood.medievalstructures.init.ModCreativeModeTabs;
-import fr.renblood.medievalstructures.init.ModItems;
+import fr.renblood.medievalstructures.init.*;
+import fr.renblood.medievalstructures.manager.DefinitionModeManager;
 import fr.renblood.medievalstructures.network.PacketHandler;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -25,6 +26,8 @@ public class MedievalStructures {
 
         ModItems.register(modEventBus);
         ModBlocks.register(modEventBus);
+        ModBlockEntities.register(modEventBus);
+        ModMenuTypes.register(modEventBus);
         ModCreativeModeTabs.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
@@ -39,5 +42,12 @@ public class MedievalStructures {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         ModCommands.register(event.getDispatcher());
+    }
+
+    @SubscribeEvent
+    public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            DefinitionModeManager.getInstance().syncToClient(player);
+        }
     }
 }

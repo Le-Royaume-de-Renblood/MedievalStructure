@@ -1,9 +1,9 @@
 package fr.renblood.medievalstructures.network;
 
-import fr.renblood.medievalstructures.manager.DefinitionModeManager;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
@@ -40,22 +40,9 @@ public class PacketSyncDefinitionMode {
 
     public static void handle(PacketSyncDefinitionMode msg, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            // Client side handling
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null) {
-                DefinitionModeManager manager = DefinitionModeManager.getInstance();
-                if (msg.isInMode) {
-                    // On ne connait pas la pos du bloc structure ici, mais ce n'est pas grave pour le rendu
-                    // On utilise une pos fictive ou on adapte le manager pour ne pas en avoir besoin côté client
-                    if (!manager.isInDefinitionMode(mc.player)) {
-                        manager.enterDefinitionMode(mc.player, BlockPos.ZERO); 
-                    }
-                    if (msg.point1 != null) manager.setPoint1(mc.player, msg.point1);
-                    if (msg.point2 != null) manager.setPoint2(mc.player, msg.point2);
-                } else {
-                    manager.leaveDefinitionMode(mc.player);
-                }
-            }
+            DistExecutor.unsafeRunWhenOn(Dist.CLIENT, () -> () -> 
+                fr.renblood.medievalstructures.client.ClientPacketHandler.handleSyncDefinitionMode(msg.isInMode, msg.point1, msg.point2)
+            );
         });
         ctx.get().setPacketHandled(true);
     }

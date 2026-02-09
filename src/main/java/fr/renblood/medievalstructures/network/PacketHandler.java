@@ -17,5 +17,11 @@ public class PacketHandler {
     public static void register() {
         int id = 0;
         INSTANCE.registerMessage(id++, PacketSyncDefinitionMode.class, PacketSyncDefinitionMode::encode, PacketSyncDefinitionMode::decode, PacketSyncDefinitionMode::handle);
+        INSTANCE.registerMessage(id++, PacketSyncInnData.class, PacketSyncInnData::encode, PacketSyncInnData::decode, PacketSyncInnData::handle);
+        INSTANCE.registerMessage(id++, PacketInnAction.class, PacketInnAction::encode, PacketInnAction::decode, PacketInnAction::handle);
+        INSTANCE.registerMessage(id++, PacketHighlightRoom.class, PacketHighlightRoom::encode, PacketHighlightRoom::decode, PacketHighlightRoom::handle);
+        INSTANCE.registerMessage(id++, PacketSyncRoomSelection.class, PacketSyncRoomSelection::encode, PacketSyncRoomSelection::decode, PacketSyncRoomSelection::handle);
+        INSTANCE.registerMessage(id++, PacketVisualizeRoom.class, PacketVisualizeRoom::encode, PacketVisualizeRoom::decode, PacketVisualizeRoom::handle);
+        INSTANCE.registerMessage(id++, PacketRequestDoorInfo.class, PacketRequestDoorInfo::encode, PacketRequestDoorInfo::decode, PacketRequestDoorInfo::handle);
     }
 }
