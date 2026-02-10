@@ -342,11 +342,13 @@ public class InnEventHandler {
             // Vérification des props (bougies, etc.)
             for (InnProp prop : inn.getProps()) {
                 if (prop.getPos().equals(pos)) {
-                    // Vérification du propriétaire
+                    // Vérification du propriétaire ou employé
                     boolean isOwner = inn.getOwnerUUID() != null && inn.getOwnerUUID().equals(player.getUUID());
-                    if (!isOwner && !player.isCreative()) {
+                    boolean isEmployee = inn.isEmployee(player.getUUID());
+                    
+                    if (!isOwner && !isEmployee && !player.isCreative()) {
                         event.setCanceled(true);
-                        player.displayClientMessage(Component.literal("Seul le propriétaire peut interagir avec cet accessoire."), true);
+                        player.displayClientMessage(Component.literal("Seul le propriétaire ou un employé peut interagir avec cet accessoire."), true);
                         return;
                     }
 
@@ -426,8 +428,9 @@ public class InnEventHandler {
                             // Si le joueur n'est pas l'occupant et n'est pas le propriétaire de l'auberge
                             boolean isOccupant = room.getOccupantUUID() != null && room.getOccupantUUID().equals(player.getUUID());
                             boolean isOwner = inn.getOwnerUUID() != null && inn.getOwnerUUID().equals(player.getUUID());
+                            boolean isEmployee = inn.isEmployee(player.getUUID());
 
-                            if (!isOccupant && !isOwner && !player.isCreative()) {
+                            if (!isOccupant && !isOwner && !isEmployee && !player.isCreative()) {
                                 event.setCanceled(true);
                                 player.displayClientMessage(Component.literal("Cette chambre est louée, vous ne pouvez pas ouvrir ceci."), true);
                                 return;

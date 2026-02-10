@@ -117,6 +117,9 @@ public class InnStructureBlock extends Block implements EntityBlock {
                         // Vérification stricte du propriétaire
                         boolean isOwner = inn.getOwnerUUID() != null && inn.getOwnerUUID().equals(player.getUUID());
                         
+                        // Vérification si le joueur est employé
+                        boolean isEmployee = inn.isEmployee(player.getUUID());
+
                         // Vérification si le joueur loue une chambre
                         boolean isRenting = false;
                         for (InnRoom room : inn.getRooms()) {
@@ -126,8 +129,8 @@ public class InnStructureBlock extends Block implements EntityBlock {
                             }
                         }
 
-                        if (isOwner || isRenting) {
-                            // Menu Propriétaire ou Locataire (qui permet de payer)
+                        if (isOwner || isEmployee || isRenting) {
+                            // Menu Propriétaire, Employé ou Locataire (qui permet de payer)
                             NetworkHooks.openScreen(serverPlayer, new SimpleMenuProvider(
                                     (id, inv, p) -> new InnOwnerMenu(id, inv, ContainerLevelAccess.create(level, pos)),
                                     Component.literal("Gestion Auberge")

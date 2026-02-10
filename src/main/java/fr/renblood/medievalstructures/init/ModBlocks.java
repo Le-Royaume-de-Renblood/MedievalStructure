@@ -1,6 +1,7 @@
 package fr.renblood.medievalstructures.init;
 
 import fr.renblood.medievalstructures.MedievalStructures;
+import fr.renblood.medievalstructures.block.ExplorationHallBlock;
 import fr.renblood.medievalstructures.block.InnStructureBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -18,6 +19,9 @@ public class ModBlocks {
 
     public static final RegistryObject<Block> INN_STRUCTURE_BLOCK = registerBlock("inn_structure_block",
             () -> new InnStructureBlock(BlockBehaviour.Properties.copy(Blocks.LECTERN).noOcclusion()));
+
+    public static final RegistryObject<Block> EXPLORATION_HALL_BLOCK = registerBlock("exploration_hall_block",
+            () -> new ExplorationHallBlock(BlockBehaviour.Properties.copy(Blocks.LECTERN).noOcclusion()));
 
     private static <T extends Block> RegistryObject<T> registerBlock(String name, Supplier<T> block) {
         RegistryObject<T> toReturn = BLOCKS.register(name, block);

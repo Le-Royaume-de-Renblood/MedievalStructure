@@ -2,6 +2,7 @@ package fr.renblood.medievalstructures.init;
 
 import fr.renblood.medievalstructures.MedievalStructures;
 import fr.renblood.medievalstructures.client.renderer.InnStructureBlockRenderer;
+import fr.renblood.medievalstructures.gui.ExplorationHallScreen;
 import fr.renblood.medievalstructures.gui.InnCustomerScreen;
 import fr.renblood.medievalstructures.gui.InnOwnerScreen;
 import net.minecraft.client.gui.screens.MenuScreens;
@@ -18,6 +19,7 @@ public class ClientSetup {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenuTypes.INN_OWNER_MENU.get(), InnOwnerScreen::new);
             MenuScreens.register(ModMenuTypes.INN_CUSTOMER_MENU.get(), InnCustomerScreen::new);
+            MenuScreens.register(ModMenuTypes.EXPLORATION_HALL_MENU.get(), ExplorationHallScreen::new);
             BlockEntityRenderers.register(ModBlockEntities.INN_STRUCTURE_BE.get(), InnStructureBlockRenderer::new);
         });
     }

@@ -23,5 +23,8 @@ public class PacketHandler {
         INSTANCE.registerMessage(id++, PacketSyncRoomSelection.class, PacketSyncRoomSelection::encode, PacketSyncRoomSelection::decode, PacketSyncRoomSelection::handle);
         INSTANCE.registerMessage(id++, PacketVisualizeRoom.class, PacketVisualizeRoom::encode, PacketVisualizeRoom::decode, PacketVisualizeRoom::handle);
         INSTANCE.registerMessage(id++, PacketRequestDoorInfo.class, PacketRequestDoorInfo::encode, PacketRequestDoorInfo::decode, PacketRequestDoorInfo::handle);
+        INSTANCE.registerMessage(id++, PacketExplorationAction.class, PacketExplorationAction::encode, PacketExplorationAction::decode, PacketExplorationAction::handle);
+        INSTANCE.registerMessage(id++, PacketSaveExploration.class, PacketSaveExploration::encode, PacketSaveExploration::decode, PacketSaveExploration::handle);
+        INSTANCE.registerMessage(id++, PacketLaunchExploration.class, PacketLaunchExploration::encode, PacketLaunchExploration::decode, PacketLaunchExploration::handle);
     }
 }

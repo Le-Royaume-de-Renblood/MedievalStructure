@@ -10,6 +10,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import fr.renblood.medievalstructures.block.entity.InnStructureBlockEntity;
+import fr.renblood.medievalstructures.init.ModDimensions;
 import fr.renblood.medievalstructures.inn.Inn;
 import fr.renblood.medievalstructures.inn.InnManager;
 import fr.renblood.medievalstructures.inn.InnProp;
@@ -17,33 +18,22 @@ import fr.renblood.medievalstructures.inn.InnRoom;
 import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import fr.renblood.medievalstructures.manager.DefinitionModeManager;
 import fr.renblood.medievalstructures.manager.RoomCreationManager;
-import fr.renblood.medievalstructures.network.PacketHandler;
-import fr.renblood.medievalstructures.network.PacketSyncRoomSelection;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraftforge.network.PacketDistributor;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class ModCommands {
@@ -69,10 +59,17 @@ public class ModCommands {
                 .then(Commands.literal("validate")
                         .executes(ModCommands::validate)));
 
+        // Commandes /exploration (Admin)
+        dispatcher.register(Commands.literal("exploration")
+                .requires(s -> s.hasPermission(2))
+                .then(Commands.literal("join")
+                        .executes(ModCommands::joinExploration)));
+
         // Commandes /auberge (Admin)
         LiteralArgumentBuilder<CommandSourceStack> aubergeCommand = Commands.literal("auberge")
                 .requires(s -> s.hasPermission(2));
 
+        // ... (Reste des commandes auberge inchangé)
         // create
         aubergeCommand.then(Commands.literal("create")
                 .then(Commands.argument("name", StringArgumentType.string())
@@ -169,6 +166,27 @@ public class ModCommands {
                                 .executes(ModCommands::listProps))));
 
         dispatcher.register(aubergeCommand);
+    }
+
+    private static int joinExploration(CommandContext<CommandSourceStack> context) {
+        try {
+            ServerPlayer player = context.getSource().getPlayerOrException();
+            ServerLevel explorationWorld = context.getSource().getServer().getLevel(ModDimensions.EXPLORATION_LEVEL_KEY);
+            
+            if (explorationWorld == null) {
+                context.getSource().sendFailure(Component.literal("Le monde d'exploration n'est pas chargé."));
+                return 0;
+            }
+            
+            // TP au spawn du monde d'exploration
+            BlockPos spawn = explorationWorld.getSharedSpawnPos();
+            player.teleportTo(explorationWorld, spawn.getX(), 100, spawn.getZ(), 0, 0);
+            context.getSource().sendSuccess(() -> Component.literal("Téléporté au monde d'exploration."), true);
+            return 1;
+        } catch (Exception e) {
+            context.getSource().sendFailure(Component.literal("Erreur: " + e.getMessage()));
+            return 0;
+        }
     }
 
     // --- Méthodes existantes ---

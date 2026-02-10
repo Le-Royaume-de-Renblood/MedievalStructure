@@ -18,6 +18,7 @@ public class ModCreativeModeTabs {
                     .title(Component.translatable("creativetab.medieval_structures_tab"))
                     .displayItems((pParameters, pOutput) -> {
                         pOutput.accept(ModBlocks.INN_STRUCTURE_BLOCK.get());
+                        pOutput.accept(ModBlocks.EXPLORATION_HALL_BLOCK.get());
                         pOutput.accept(ModItems.INNKEEPER_WAND.get());
                     })
                     .build());

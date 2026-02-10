@@ -135,41 +135,60 @@ Adding Libraries to Inheritance
 Reading Input: C:\Users\alban\AppData\Roaming\ModrinthApp\profiles\Test Mods RP\mods\medieval_structures-0.1.jar
 Adding input to inheritance map
 Processing entries
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z from net/minecraft/world/inventory/AbstractContainerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z: stillValid -> m_6875_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z from net/minecraft/world/inventory/AbstractContainerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z: stillValid -> m_6875_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack; from net/minecraft/world/inventory/AbstractContainerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack;: quickMoveStack -> m_7648_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z from net/minecraft/world/inventory/AbstractContainerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z: stillValid -> m_6875_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z from net/minecraft/world/inventory/AbstractContainerMenu/stillValid(Lnet/minecraft/world/entity/player/Player;)Z: stillValid -> m_6875_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack; from net/minecraft/world/inventory/AbstractContainerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack;: quickMoveStack -> m_7648_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack; from net/minecraft/world/inventory/AbstractContainerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack;: quickMoveStack -> m_7648_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack; from net/minecraft/world/inventory/AbstractContainerMenu/quickMoveStack(Lnet/minecraft/world/entity/player/Player;I)Lnet/minecraft/world/item/ItemStack;: quickMoveStack -> m_7648_
 Conflicting propagated mapping for fr/renblood/medievalstructures/client/renderer/InnStructureBlockRenderer/render(Lnet/minecraft/world/level/block/entity/BlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V from net/minecraft/client/renderer/blockentity/BlockEntityRenderer/render(Lnet/minecraft/world/level/block/entity/BlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V: render -> m_6922_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnRoomsScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnRoomsScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnEmployeesScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnEmployeesScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnPropsScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnPropsScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerScreen/init()V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/init()V: init -> m_7856_
 Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnCustomerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V: renderBg -> m_7286_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
-Conflicting propagated mapping for net/minecraft/world/entity/LivingEntity/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V from net/minecraft/world/entity/player/Player/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V: lambda$addAdditionalSaveData$3 -> m_219754_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/init()V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/init()V: init -> m_7856_
-Conflicting propagated mapping for fr/renblood/medievalstructures/inn/InnManager/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/saveddata/SavedData/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;: save -> m_7176_
-Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V: renderBg -> m_7286_
-Conflicting propagated mapping for net/minecraftforge/network/IContainerFactory/create(ILnet/minecraft/world/entity/player/Inventory;)Lnet/minecraft/world/inventory/AbstractContainerMenu; from net/minecraft/world/inventory/MenuType$MenuSupplier/create(ILnet/minecraft/world/entity/player/Inventory;)Lnet/minecraft/world/inventory/AbstractContainerMenu;: create -> m_39994_
-Conflicting propagated mapping for fr/renblood/medievalstructures/item/InnkeeperWandItem/useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult; from net/minecraft/world/item/Item/useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;: useOn -> m_6225_
-Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/state/BlockBehaviour/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState;: rotate -> m_6843_
-Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/Block/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState;: getStateForPlacement -> m_5573_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallScreen/init()V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallScreen/renderLabels(Lnet/minecraft/client/gui/GuiGraphics;II)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/renderLabels(Lnet/minecraft/client/gui/GuiGraphics;II)V: renderLabels -> m_280003_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/ExplorationHallScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V: renderBg -> m_7286_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/getUpdateTag()Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/block/entity/BlockEntity/getUpdateTag()Lnet/minecraft/nbt/CompoundTag;: getUpdateTag -> m_5995_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/load(Lnet/minecraft/nbt/CompoundTag;)V from net/minecraft/world/level/block/entity/BlockEntity/load(Lnet/minecraft/nbt/CompoundTag;)V: load -> m_142466_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/getUpdateTag()Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/block/entity/BlockEntity/getUpdateTag()Lnet/minecraft/nbt/CompoundTag;: getUpdateTag -> m_5995_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/saveAdditional(Lnet/minecraft/nbt/CompoundTag;)V from net/minecraft/world/level/block/entity/BlockEntity/saveAdditional(Lnet/minecraft/nbt/CompoundTag;)V: saveAdditional -> m_183515_
-Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/setPlacedBy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)V from net/minecraft/world/level/block/Block/setPlacedBy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)V: setPlacedBy -> m_6402_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/load(Lnet/minecraft/nbt/CompoundTag;)V from net/minecraft/world/level/block/entity/BlockEntity/load(Lnet/minecraft/nbt/CompoundTag;)V: load -> m_142466_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/getUpdatePacket()Lnet/minecraft/network/protocol/Packet; from net/minecraft/world/level/block/entity/BlockEntity/getUpdatePacket()Lnet/minecraft/network/protocol/Packet;: getUpdatePacket -> m_58483_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/saveAdditional(Lnet/minecraft/nbt/CompoundTag;)V from net/minecraft/world/level/block/entity/BlockEntity/saveAdditional(Lnet/minecraft/nbt/CompoundTag;)V: saveAdditional -> m_183515_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu; from net/minecraft/world/inventory/MenuConstructor/createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;: createMenu -> m_7208_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/getUpdatePacket()Lnet/minecraft/network/protocol/Packet; from net/minecraft/world/level/block/entity/BlockEntity/getUpdatePacket()Lnet/minecraft/network/protocol/Packet;: getUpdatePacket -> m_58483_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity/getDisplayName()Lnet/minecraft/network/chat/Component; from net/minecraft/world/MenuProvider/getDisplayName()Lnet/minecraft/network/chat/Component;: getDisplayName -> m_5446_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu; from net/minecraft/world/inventory/MenuConstructor/createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;: createMenu -> m_7208_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity/getDisplayName()Lnet/minecraft/network/chat/Component; from net/minecraft/world/MenuProvider/getDisplayName()Lnet/minecraft/network/chat/Component;: getDisplayName -> m_5446_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/state/BlockBehaviour/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState;: rotate -> m_6843_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/Block/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState;: getStateForPlacement -> m_5573_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/state/BlockBehaviour/rotate(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Rotation;)Lnet/minecraft/world/level/block/state/BlockState;: rotate -> m_6843_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/Block/getStateForPlacement(Lnet/minecraft/world/item/context/BlockPlaceContext;)Lnet/minecraft/world/level/block/state/BlockState;: getStateForPlacement -> m_5573_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/mirror(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Mirror;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/state/BlockBehaviour/mirror(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Mirror;)Lnet/minecraft/world/level/block/state/BlockState;: mirror -> m_6943_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/createBlockStateDefinition(Lnet/minecraft/world/level/block/state/StateDefinition$Builder;)V from net/minecraft/world/level/block/Block/createBlockStateDefinition(Lnet/minecraft/world/level/block/state/StateDefinition$Builder;)V: createBlockStateDefinition -> m_7926_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/setPlacedBy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)V from net/minecraft/world/level/block/Block/setPlacedBy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/item/ItemStack;)V: setPlacedBy -> m_6402_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/use(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult; from net/minecraft/world/level/block/state/BlockBehaviour/use(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;: use -> m_6227_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/playerWillDestroy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/player/Player;)V from net/minecraft/world/level/block/Block/playerWillDestroy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/player/Player;)V: playerWillDestroy -> m_5707_
+Conflicting propagated mapping for fr/renblood/medievalstructures/block/ExplorationHallBlock/newBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/entity/BlockEntity; from net/minecraft/world/level/block/EntityBlock/newBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/entity/BlockEntity;: newBlockEntity -> m_142194_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/mirror(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Mirror;)Lnet/minecraft/world/level/block/state/BlockState; from net/minecraft/world/level/block/state/BlockBehaviour/mirror(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/Mirror;)Lnet/minecraft/world/level/block/state/BlockState;: mirror -> m_6943_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/createBlockStateDefinition(Lnet/minecraft/world/level/block/state/StateDefinition$Builder;)V from net/minecraft/world/level/block/Block/createBlockStateDefinition(Lnet/minecraft/world/level/block/state/StateDefinition$Builder;)V: createBlockStateDefinition -> m_7926_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/use(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult; from net/minecraft/world/level/block/state/BlockBehaviour/use(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;: use -> m_6227_
 Conflicting propagated mapping for fr/renblood/medievalstructures/block/InnStructureBlock/newBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/entity/BlockEntity; from net/minecraft/world/level/block/EntityBlock/newBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Lnet/minecraft/world/level/block/entity/BlockEntity;: newBlockEntity -> m_142194_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/init()V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/init()V: init -> m_7856_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnOwnerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V from net/minecraft/client/gui/screens/inventory/AbstractContainerScreen/renderBg(Lnet/minecraft/client/gui/GuiGraphics;FII)V: renderBg -> m_7286_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnPropsScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnRoomsScreen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V from net/minecraft/client/gui/screens/Screen/render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V: render -> m_88315_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnPropsScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
+Conflicting propagated mapping for fr/renblood/medievalstructures/gui/InnRoomsScreen/init()V from net/minecraft/client/gui/screens/Screen/init()V: init -> m_7856_
+Conflicting propagated mapping for fr/renblood/medievalstructures/inn/InnManager/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/saveddata/SavedData/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;: save -> m_7176_
+Conflicting propagated mapping for fr/renblood/medievalstructures/manager/ExplorationManager/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag; from net/minecraft/world/level/saveddata/SavedData/save(Lnet/minecraft/nbt/CompoundTag;)Lnet/minecraft/nbt/CompoundTag;: save -> m_7176_
+Conflicting propagated mapping for net/minecraft/world/entity/LivingEntity/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V from net/minecraft/world/entity/player/Player/lambda$addAdditionalSaveData$3(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/nbt/Tag;)V: lambda$addAdditionalSaveData$3 -> m_219754_
+Conflicting propagated mapping for fr/renblood/medievalstructures/item/InnkeeperWandItem/useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult; from net/minecraft/world/item/Item/useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;: useOn -> m_6225_
+Conflicting propagated mapping for net/minecraftforge/network/IContainerFactory/create(ILnet/minecraft/world/entity/player/Inventory;)Lnet/minecraft/world/inventory/AbstractContainerMenu; from net/minecraft/world/inventory/MenuType$MenuSupplier/create(ILnet/minecraft/world/entity/player/Inventory;)Lnet/minecraft/world/inventory/AbstractContainerMenu;: create -> m_39994_
 Conflicting propagated mapping for net/minecraft/world/level/block/entity/ChestBlockEntity/setBlockState(Lnet/minecraft/world/level/block/state/BlockState;)V from net/minecraft/world/level/block/entity/BlockEntity/setBlockState(Lnet/minecraft/world/level/block/state/BlockState;)V: setBlockState -> m_155250_
 Adding extras
 Sorting
@@ -180,31 +199,45 @@ Writing Output: D:\Projets\Projet\mods\MedievalStructures\MedievalStructures\bui
   assets/
   assets/medieval_structures/
   assets/medieval_structures/blockstates/
+  assets/medieval_structures/blockstates/exploration_hall_block.json
   assets/medieval_structures/blockstates/inn_structure_block.json
   assets/medieval_structures/lang/
   assets/medieval_structures/lang/en_us.json
   assets/medieval_structures/lang/fr_fr.json
   assets/medieval_structures/models/
   assets/medieval_structures/models/block/
+  assets/medieval_structures/models/block/exploration_hall_block.json
   assets/medieval_structures/models/block/inn_structure_block.json
   assets/medieval_structures/models/item/
+  assets/medieval_structures/models/item/exploration_hall_block.json
   assets/medieval_structures/models/item/inn_structure_block.json
   assets/medieval_structures/models/item/innkeeper_wand.json
   assets/medieval_structures/textures/
   assets/medieval_structures/textures/block/
+  assets/medieval_structures/textures/block/exploration_hall_block.png
   assets/medieval_structures/textures/block/inn_customer_gui.png
   assets/medieval_structures/textures/block/inn_structure_block.png
   assets/medieval_structures/textures/gui/
+  assets/medieval_structures/textures/gui/exploration_hall_gui (2).png
+  assets/medieval_structures/textures/gui/exploration_hall_gui.png
   assets/medieval_structures/textures/gui/inn_customer_gui.png
   assets/medieval_structures/textures/gui/inn_owner_gui.png
+  data/
+  data/medieval_structures/
+  data/medieval_structures/dimension/
+  data/medieval_structures/dimension/exploration_world.json
+  data/medieval_structures/dimension_type/
+  data/medieval_structures/dimension_type/exploration_type.json
   fr/
   fr/renblood/
   fr/renblood/medievalstructures/
   fr/renblood/medievalstructures/Config.class
   fr/renblood/medievalstructures/MedievalStructures.class
   fr/renblood/medievalstructures/block/
+  fr/renblood/medievalstructures/block/ExplorationHallBlock.class
   fr/renblood/medievalstructures/block/InnStructureBlock.class
   fr/renblood/medievalstructures/block/entity/
+  fr/renblood/medievalstructures/block/entity/ExplorationHallBlockEntity.class
   fr/renblood/medievalstructures/block/entity/InnStructureBlockEntity.class
   fr/renblood/medievalstructures/client/
   fr/renblood/medievalstructures/client/ClientModEvents.class
@@ -215,8 +248,13 @@ Writing Output: D:\Projets\Projet\mods\MedievalStructures\MedievalStructures\bui
   fr/renblood/medievalstructures/command/ModCommands.class
   fr/renblood/medievalstructures/event/
   fr/renblood/medievalstructures/event/ClientModEvents.class
+  fr/renblood/medievalstructures/event/ExplorationEventHandler.class
   fr/renblood/medievalstructures/event/InnEventHandler.class
+  fr/renblood/medievalstructures/event/ServerTickHandler.class
   fr/renblood/medievalstructures/gui/
+  fr/renblood/medievalstructures/gui/ExplorationHallMenu.class
+  fr/renblood/medievalstructures/gui/ExplorationHallScreen$ScreenState.class
+  fr/renblood/medievalstructures/gui/ExplorationHallScreen.class
   fr/renblood/medievalstructures/gui/InnCustomerMenu.class
   fr/renblood/medievalstructures/gui/InnCustomerScreen.class
   fr/renblood/medievalstructures/gui/InnEmployeesScreen.class
@@ -229,6 +267,7 @@ Writing Output: D:\Projets\Projet\mods\MedievalStructures\MedievalStructures\bui
   fr/renblood/medievalstructures/init/ModBlockEntities.class
   fr/renblood/medievalstructures/init/ModBlocks.class
   fr/renblood/medievalstructures/init/ModCreativeModeTabs.class
+  fr/renblood/medievalstructures/init/ModDimensions.class
   fr/renblood/medievalstructures/init/ModItems.class
   fr/renblood/medievalstructures/init/ModMenuTypes.class
   fr/renblood/medievalstructures/inn/
@@ -242,15 +281,24 @@ Writing Output: D:\Projets\Projet\mods\MedievalStructures\MedievalStructures\bui
   fr/renblood/medievalstructures/item/InnkeeperWandItem.class
   fr/renblood/medievalstructures/manager/
   fr/renblood/medievalstructures/manager/DefinitionModeManager.class
+  fr/renblood/medievalstructures/manager/ExplorationManager$ExplorationState.class
+  fr/renblood/medievalstructures/manager/ExplorationManager$PendingExploration.class
+  fr/renblood/medievalstructures/manager/ExplorationManager.class
   fr/renblood/medievalstructures/manager/RoomCreationManager$RoomCreationData.class
   fr/renblood/medievalstructures/manager/RoomCreationManager.class
   fr/renblood/medievalstructures/network/
+  fr/renblood/medievalstructures/network/PacketExplorationAction$PlayerConfig.class
+  fr/renblood/medievalstructures/network/PacketExplorationAction.class
   fr/renblood/medievalstructures/network/PacketHandler.class
   fr/renblood/medievalstructures/network/PacketHighlightRoom.class
   fr/renblood/medievalstructures/network/PacketInnAction.class
+  fr/renblood/medievalstructures/network/PacketLaunchExploration.class
   fr/renblood/medievalstructures/network/PacketRequestDoorInfo.class
+  fr/renblood/medievalstructures/network/PacketSaveExploration.class
   fr/renblood/medievalstructures/network/PacketSyncDefinitionMode.class
   fr/renblood/medievalstructures/network/PacketSyncInnData.class
   fr/renblood/medievalstructures/network/PacketSyncRoomSelection.class
   fr/renblood/medievalstructures/network/PacketVisualizeRoom.class
+  fr/renblood/medievalstructures/util/
+  fr/renblood/medievalstructures/util/DimensionUtils.class
   pack.mcmeta
