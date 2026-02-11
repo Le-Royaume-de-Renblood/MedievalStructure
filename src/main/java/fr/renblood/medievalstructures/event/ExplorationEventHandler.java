@@ -16,19 +16,7 @@ public class ExplorationEventHandler {
 
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player && !player.level().isClientSide) {
-            // On vérifie si le joueur vient de mourir (pas un retour de l'End)
-            if (!event.isEndConquered()) {
-                // Malheureusement, l'event ne nous dit pas facilement d'où on vient.
-                // Mais on peut vérifier si le joueur est dans la dimension d'exploration AVANT le respawn via un autre event (LivingDeathEvent)
-                // Ou alors on suppose que si le joueur respawn, on lui envoie le message s'il était dans l'exploration.
-                
-                // Pour l'instant, on va juste envoyer le message si le joueur respawn dans l'Overworld
-                // et qu'il n'a pas de lit (ce qui arrive souvent quand on meurt dans une dimension sans lit).
-                
-                // Une meilleure approche : Écouter LivingDeathEvent pour savoir où il est mort.
-            }
-        }
+        // Vide pour l'instant, géré dans onPlayerRespawnMessage
     }
     
     @SubscribeEvent
@@ -36,8 +24,25 @@ public class ExplorationEventHandler {
         if (event.getEntity() instanceof ServerPlayer player) {
             if (player.level().dimension().equals(ModDimensions.EXPLORATION_LEVEL_KEY)) {
                 // Le joueur est mort dans l'exploration
-                // On peut stocker un tag sur le joueur pour lui envoyer le message au respawn
                 player.getPersistentData().putBoolean("DiedInExploration", true);
+                // On garde aussi l'origine si elle est présente
+                if (player.getPersistentData().contains("ExplorationOrigin")) {
+                    // Déjà stocké, rien à faire de plus, mais on s'assure qu'il est là
+                }
+            }
+        }
+    }
+    
+    @SubscribeEvent
+    public static void onPlayerClone(PlayerEvent.Clone event) {
+        // Copier les données persistantes de l'ancien joueur vers le nouveau
+        if (event.isWasDeath()) {
+            if (event.getOriginal().getPersistentData().getBoolean("DiedInExploration")) {
+                event.getEntity().getPersistentData().putBoolean("DiedInExploration", true);
+                
+                if (event.getOriginal().getPersistentData().contains("ExplorationOrigin")) {
+                    event.getEntity().getPersistentData().putLong("ExplorationOrigin", event.getOriginal().getPersistentData().getLong("ExplorationOrigin"));
+                }
             }
         }
     }
@@ -49,9 +54,20 @@ public class ExplorationEventHandler {
                 player.getPersistentData().remove("DiedInExploration");
                 player.sendSystemMessage(Component.literal("La mort n'est qu'un début... mais pas pour vous. Vous êtes juste mauvais."));
                 
-                // Si on veut forcer le retour à l'Overworld (au cas où il aurait un lit dans l'exploration)
-                if (player.level().dimension().equals(ModDimensions.EXPLORATION_LEVEL_KEY)) {
-                    ServerLevel overworld = player.server.overworld();
+                // Récupérer la position d'origine stockée
+                BlockPos origin = null;
+                if (player.getPersistentData().contains("ExplorationOrigin")) {
+                    origin = BlockPos.of(player.getPersistentData().getLong("ExplorationOrigin"));
+                    player.getPersistentData().remove("ExplorationOrigin");
+                }
+
+                ServerLevel overworld = player.server.overworld();
+                
+                // Si on a une origine valide, on TP à côté
+                if (origin != null) {
+                    player.teleportTo(overworld, origin.getX() + 0.5, origin.getY() + 1, origin.getZ() + 0.5, 0, 0);
+                } else {
+                    // Fallback : Spawn mondial si pas d'origine trouvée
                     BlockPos spawn = overworld.getSharedSpawnPos();
                     player.teleportTo(overworld, spawn.getX(), spawn.getY(), spawn.getZ(), 0, 0);
                 }

@@ -1,7 +1,9 @@
 package fr.renblood.medievalstructures.network;
 
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
+import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import fr.renblood.medievalstructures.manager.ExplorationManager;
+import fr.renblood.medievalstructures.util.ExplorationCostCalculator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -34,14 +36,23 @@ public class PacketLaunchExploration {
                 BlockEntity be = serverLevel.getBlockEntity(msg.pos);
                 if (be instanceof ExplorationHallBlockEntity hall && hall.hasExplorationReady()) {
                     
-                    // Lancer le compte à rebours
-                    ExplorationManager.get(serverLevel).startCountdown(serverLevel, msg.pos, hall.getSavedDuration());
+                    // Calculer le coût
+                    int cost = ExplorationCostCalculator.calculateTotalCost(hall.getSavedDuration(), hall.getSavedConfigs());
                     
-                    // Réinitialiser le bloc (consommer l'exploration)
-                    hall.clearExploration();
-                    
-                    player.sendSystemMessage(Component.literal("Lancement de l'exploration ! Restez dans la zone (7x7)."));
-                    player.sendSystemMessage(Component.literal("Départ dans 30 secondes..."));
+                    // Vérifier et retirer l'argent
+                    if (MedievalCoinsIntegration.removeMoney(player, cost)) {
+                        // Lancer le compte à rebours
+                        ExplorationManager.get(serverLevel).startCountdown(serverLevel, msg.pos, hall.getSavedDuration());
+                        
+                        // Réinitialiser le bloc (consommer l'exploration)
+                        hall.clearExploration();
+                        
+                        player.sendSystemMessage(Component.literal("Lancement de l'exploration ! Restez dans la zone (7x7)."));
+                        player.sendSystemMessage(Component.literal("Départ dans 30 secondes..."));
+                        player.sendSystemMessage(Component.literal("Coût payé : " + ExplorationCostCalculator.formatCost(cost)).withStyle(net.minecraft.ChatFormatting.GREEN));
+                    } else {
+                        player.sendSystemMessage(Component.literal("Fonds insuffisants ! Coût : " + ExplorationCostCalculator.formatCost(cost)).withStyle(net.minecraft.ChatFormatting.RED));
+                    }
                     
                 } else {
                     player.sendSystemMessage(Component.literal("Aucune exploration prête à être lancée."));

@@ -7,6 +7,7 @@ import fr.renblood.medievalstructures.network.PacketExplorationAction;
 import fr.renblood.medievalstructures.network.PacketHandler;
 import fr.renblood.medievalstructures.network.PacketLaunchExploration;
 import fr.renblood.medievalstructures.network.PacketSaveExploration;
+import fr.renblood.medievalstructures.util.ExplorationCostCalculator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -77,6 +78,15 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         // On ne dessine pas les titres par défaut (Inventory, etc.)
+    }
+    
+    public void updateExplorationState(boolean hasExploration) {
+        // Appelé par le packet de sync
+        // On force la mise à jour des boutons du menu principal
+        if (currentState == ScreenState.MAIN_MENU) {
+            if (launchButton != null) launchButton.active = hasExploration;
+            if (viewButton != null) viewButton.active = hasExploration;
+        }
     }
 
     private void initWidgets() {
@@ -283,12 +293,22 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         
         if (currentState == ScreenState.MAIN_MENU) {
             guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.main_menu"), x + 8, y + 6, 0x404040, false);
-            // Afficher le coût ici plus tard
+            ExplorationHallBlockEntity be = getBlockEntity();
+            if (be != null && be.hasExplorationReady()) {
+                int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
+                String costStr = ExplorationCostCalculator.formatCost(cost);
+                guiGraphics.drawString(this.font, "Coût: " + costStr, x + 10, y + 120, 0x404040, false);
+            }
         } else if (currentState == ScreenState.CREATE_EXPLORATION) {
             guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.create"), x + 8, y + 6, 0x404040, false);
             Component label = Component.translatable("gui.medieval_structures.exploration.player_config", (currentPlayerIndex + 1));
             int textWidth = this.font.width(label);
             guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, 0x404040, false);
+            
+            int cost = ExplorationCostCalculator.calculateTotalCost(selectedDuration, playerConfigs);
+            String costStr = ExplorationCostCalculator.formatCost(cost);
+            guiGraphics.drawString(this.font, "Coût: " + costStr, x + 10, y + 150, 0x404040, false);
+            
         } else if (currentState == ScreenState.VIEW_EXPLORATION) {
             guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.view_title"), x + 8, y + 6, 0x404040, false);
             ExplorationHallBlockEntity be = getBlockEntity();
@@ -304,7 +324,27 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
                     
                     guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.chests_val", config.chestCount), centerX - 53, y + 80, 0x404040, false);
                     guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.animals_val", config.animalCount), centerX - 53, y + 105, 0x404040, false);
+                    
+                    // Afficher le coût individuel
+                    // On crée une liste temporaire avec juste ce joueur pour utiliser le calculateur
+                    List<PacketExplorationAction.PlayerConfig> singleConfig = new ArrayList<>();
+                    singleConfig.add(config);
+                    // Le coût du temps est divisé par le nombre de joueurs ? Non, le calculateur prend le total.
+                    // On veut juste le coût des extras pour ce joueur ? Ou sa part du total ?
+                    // Affichons le coût des extras (coffres + animaux) pour ce joueur
+                    // Car le coût du temps dépend du nombre total de joueurs.
+                    
+                    // Calcul manuel simple pour l'affichage
+                    // TODO: Mettre ça dans le calculateur si besoin
+                    // Mais ici on veut juste afficher "Coût joueur: X"
+                    
+                    // On va afficher le coût total de l'exploration divisé par le nombre de joueurs ? Non.
+                    // Affichons juste "Extras: X"
                 }
+                
+                int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
+                String costStr = ExplorationCostCalculator.formatCost(cost);
+                guiGraphics.drawString(this.font, "Total: " + costStr, x + 10, y + 130, 0x404040, false);
             }
         }
     }

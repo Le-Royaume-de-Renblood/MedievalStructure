@@ -26,5 +26,6 @@ public class PacketHandler {
         INSTANCE.registerMessage(id++, PacketExplorationAction.class, PacketExplorationAction::encode, PacketExplorationAction::decode, PacketExplorationAction::handle);
         INSTANCE.registerMessage(id++, PacketSaveExploration.class, PacketSaveExploration::encode, PacketSaveExploration::decode, PacketSaveExploration::handle);
         INSTANCE.registerMessage(id++, PacketLaunchExploration.class, PacketLaunchExploration::encode, PacketLaunchExploration::decode, PacketLaunchExploration::handle);
+        INSTANCE.registerMessage(id++, PacketSyncExplorationState.class, PacketSyncExplorationState::encode, PacketSyncExplorationState::decode, PacketSyncExplorationState::handle);
     }
 }

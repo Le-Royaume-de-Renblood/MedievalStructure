@@ -17,6 +17,7 @@ import fr.renblood.medievalstructures.inn.InnProp;
 import fr.renblood.medievalstructures.inn.InnRoom;
 import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import fr.renblood.medievalstructures.manager.DefinitionModeManager;
+import fr.renblood.medievalstructures.manager.ExplorationManager;
 import fr.renblood.medievalstructures.manager.RoomCreationManager;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -31,6 +32,7 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 
@@ -63,7 +65,10 @@ public class ModCommands {
         dispatcher.register(Commands.literal("exploration")
                 .requires(s -> s.hasPermission(2))
                 .then(Commands.literal("join")
-                        .executes(ModCommands::joinExploration)));
+                        .executes(ModCommands::joinExploration))
+                .then(Commands.literal("debug")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(ModCommands::setExplorationDebug))));
 
         // Commandes /auberge (Admin)
         LiteralArgumentBuilder<CommandSourceStack> aubergeCommand = Commands.literal("auberge")
@@ -178,15 +183,29 @@ public class ModCommands {
                 return 0;
             }
             
-            // TP au spawn du monde d'exploration
-            BlockPos spawn = explorationWorld.getSharedSpawnPos();
-            player.teleportTo(explorationWorld, spawn.getX(), 100, spawn.getZ(), 0, 0);
+            ExplorationManager manager = ExplorationManager.get(context.getSource().getServer().overworld());
+            BlockPos spawn = manager.getLastExplorationSpawn();
+            
+            if (spawn == null) {
+                 context.getSource().sendFailure(Component.literal("Aucune exploration active à rejoindre."));
+                 return 0;
+            }
+            
+            // TP au spawn exact (sur la plateforme)
+            player.teleportTo(explorationWorld, spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, 0, 0);
             context.getSource().sendSuccess(() -> Component.literal("Téléporté au monde d'exploration."), true);
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("Erreur: " + e.getMessage()));
             return 0;
         }
+    }
+    
+    private static int setExplorationDebug(CommandContext<CommandSourceStack> context) {
+        boolean enabled = BoolArgumentType.getBool(context, "enabled");
+        ExplorationManager.DEBUG_MODE = enabled;
+        context.getSource().sendSuccess(() -> Component.literal("Mode Debug Exploration " + (enabled ? "ACTIVÉ (30s)" : "DÉSACTIVÉ")), true);
+        return 1;
     }
 
     // --- Méthodes existantes ---
