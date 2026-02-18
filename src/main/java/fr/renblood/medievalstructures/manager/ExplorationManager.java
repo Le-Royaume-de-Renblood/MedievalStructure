@@ -1,7 +1,10 @@
 package fr.renblood.medievalstructures.manager;
 
+import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.init.ModDimensions;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.NonNullList;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -11,15 +14,18 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.RotatedPillarBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.phys.AABB;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class ExplorationManager extends SavedData {
     private static final String DATA_NAME = "medieval_structures_explorations";
@@ -39,8 +45,41 @@ public class ExplorationManager extends SavedData {
         }
         return null;
     }
+    
+    public int getLastExplorationX() {
+        if (!activeExplorations.isEmpty()) {
+            return activeExplorations.get(activeExplorations.size() - 1).targetX;
+        }
+        if (nextExplorationX > 0) {
+            return nextExplorationX - 5000;
+        }
+        return -1;
+    }
+    
+    public boolean isCountdownActive(BlockPos origin) {
+        for (PendingExploration explo : pendingExplorations) {
+            if (explo.origin.equals(origin) && explo.state == ExplorationState.COUNTDOWN) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    public void startCountdown(ServerLevel level, BlockPos origin, int durationMinutes) {
+    public int cancelCountdown(BlockPos origin) {
+        Iterator<PendingExploration> it = pendingExplorations.iterator();
+        while (it.hasNext()) {
+            PendingExploration explo = it.next();
+            if (explo.origin.equals(origin) && explo.state == ExplorationState.COUNTDOWN) {
+                updateBlockEntity(origin, 0, false); // Reset BE
+                it.remove();
+                setDirty();
+                return explo.paidAmount;
+            }
+        }
+        return -1;
+    }
+
+    public void startCountdown(ServerLevel level, BlockPos origin, int durationMinutes, int requiredPlayers, int paidAmount, Map<String, List<BlockPos>> playerChests) {
         int x = nextExplorationX;
         nextExplorationX += 5000;
         
@@ -48,20 +87,53 @@ public class ExplorationManager extends SavedData {
             durationMinutes = 0;
         }
         
-        pendingExplorations.add(new PendingExploration(origin, durationMinutes, x));
+        pendingExplorations.add(new PendingExploration(origin, durationMinutes, x, requiredPlayers, paidAmount, playerChests));
         setDirty();
+    }
+    
+    private void updateBlockEntity(BlockPos pos, int ticks, boolean waiting) {
+        // Cette méthode doit être appelée sur le serveur, donc on a besoin du niveau
+        // Mais ExplorationManager est global. On va supposer que le bloc est dans l'Overworld.
+        // Si le bloc est ailleurs, il faudra stocker la dimension dans PendingExploration.
+        // Pour l'instant, on suppose Overworld.
+        // TODO: Gérer le niveau correctement si le bloc n'est pas dans l'Overworld
+    }
+    
+    private void updateBlockEntity(ServerLevel level, BlockPos pos, int ticks, boolean waiting) {
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof ExplorationHallBlockEntity hall) {
+            hall.setCountdown(ticks, waiting);
+        }
     }
 
     public void tick(MinecraftServer server) {
         Iterator<PendingExploration> itPending = pendingExplorations.iterator();
         while (itPending.hasNext()) {
             PendingExploration explo = itPending.next();
+            ServerLevel level = server.overworld();
             
             if (explo.state == ExplorationState.COUNTDOWN) {
+                AABB zone = new AABB(explo.origin).inflate(3, 2, 3);
+                int playerCount = level.getEntitiesOfClass(ServerPlayer.class, zone).size();
+                
+                if (!DEBUG_MODE && playerCount < explo.requiredPlayers) {
+                    if (server.getTickCount() % 40 == 0) {
+                        level.getPlayers(p -> p.distanceToSqr(explo.origin.getX(), explo.origin.getY(), explo.origin.getZ()) < 1000).forEach(p -> 
+                            p.sendSystemMessage(Component.literal("En attente de joueurs... (" + playerCount + "/" + explo.requiredPlayers + ")").withStyle(net.minecraft.ChatFormatting.YELLOW))
+                        );
+                        updateBlockEntity(level, explo.origin, explo.ticksRemaining, true);
+                    }
+                    continue;
+                }
+
                 explo.ticksRemaining--;
+                
+                // Mise à jour du BE (toutes les secondes pour éviter trop de packets)
+                if (explo.ticksRemaining % 20 == 0) {
+                    updateBlockEntity(level, explo.origin, explo.ticksRemaining, false);
+                }
 
                 if (explo.ticksRemaining % 20 == 0) {
-                    ServerLevel level = server.overworld();
                     spawnParticles(level, explo.origin);
                     
                     int seconds = explo.ticksRemaining / 20;
@@ -73,6 +145,7 @@ public class ExplorationManager extends SavedData {
                 }
 
                 if (explo.ticksRemaining <= 0) {
+                    updateBlockEntity(level, explo.origin, 0, false); // Reset BE
                     explo.state = ExplorationState.TELEPORTING;
                     explo.ticksRemaining = 5;
                     setDirty();
@@ -88,11 +161,10 @@ public class ExplorationManager extends SavedData {
                         }
                     }
                 } else {
-                    BlockPos actualSpawn = teleportPlayers(server, explo);
+                    ActiveExploration active = teleportPlayers(server, explo);
                     
-                    if (actualSpawn != null) {
-                        int durationTicks = explo.durationMinutes > 0 ? explo.durationMinutes * 60 * 20 : 30 * 20;
-                        activeExplorations.add(new ActiveExploration(actualSpawn, durationTicks, explo.origin));
+                    if (active != null) {
+                        activeExplorations.add(active);
                     }
                     
                     itPending.remove();
@@ -144,6 +216,31 @@ public class ExplorationManager extends SavedData {
         ServerLevel overworld = server.overworld();
         
         if (explorationWorld != null) {
+            // Rapatrier les coffres
+            for (Map.Entry<BlockPos, BlockPos> entry : active.chestMapping.entrySet()) {
+                BlockPos destPos = entry.getKey();
+                BlockPos sourcePos = entry.getValue();
+                
+                BlockEntity destBe = explorationWorld.getBlockEntity(destPos);
+                BlockEntity sourceBe = overworld.getBlockEntity(sourcePos);
+                
+                if (destBe instanceof ChestBlockEntity destChest && sourceBe instanceof ChestBlockEntity sourceChest) {
+                    NonNullList<ItemStack> items = NonNullList.withSize(destChest.getContainerSize(), ItemStack.EMPTY);
+                    for (int i = 0; i < destChest.getContainerSize(); i++) {
+                        items.set(i, destChest.getItem(i).copy());
+                    }
+                    
+                    sourceChest.clearContent();
+                    for (int i = 0; i < items.size(); i++) {
+                        if (i < sourceChest.getContainerSize()) {
+                            sourceChest.setItem(i, items.get(i));
+                        }
+                    }
+                    sourceChest.setChanged();
+                    overworld.sendBlockUpdated(sourcePos, overworld.getBlockState(sourcePos), overworld.getBlockState(sourcePos), 3);
+                }
+            }
+            
             AABB zone = new AABB(active.spawnPos).inflate(2000, 320, 2000);
             List<ServerPlayer> players = explorationWorld.getEntitiesOfClass(ServerPlayer.class, zone);
             
@@ -155,7 +252,6 @@ public class ExplorationManager extends SavedData {
                 player.getPersistentData().remove("ExplorationOrigin");
             }
             
-            // Collecter d'abord les entités à supprimer pour éviter ConcurrentModificationException
             List<Entity> toRemove = new ArrayList<>();
             explorationWorld.getEntities().getAll().forEach(entity -> {
                 if (entity != null && !(entity instanceof ServerPlayer) && zone.contains(entity.position())) {
@@ -163,9 +259,13 @@ public class ExplorationManager extends SavedData {
                 }
             });
             
-            // Supprimer ensuite
             for (Entity entity : toRemove) {
                 entity.discard();
+            }
+            
+            // Nettoyer le camp
+            for (BlockPos pos : active.builtBlocks) {
+                explorationWorld.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
             }
         }
     }
@@ -183,7 +283,7 @@ public class ExplorationManager extends SavedData {
         }
     }
 
-    private BlockPos teleportPlayers(MinecraftServer server, PendingExploration explo) {
+    private ActiveExploration teleportPlayers(MinecraftServer server, PendingExploration explo) {
         ServerLevel explorationWorld = server.getLevel(ModDimensions.EXPLORATION_LEVEL_KEY);
         
         if (explorationWorld != null) {
@@ -194,7 +294,6 @@ public class ExplorationManager extends SavedData {
             int targetX = explo.targetX;
             int targetZ = 0;
             
-            // On force le chargement du chunk central pour avoir une hauteur correcte
             explorationWorld.getChunk(targetX >> 4, targetZ >> 4);
             
             BlockPos safePos = findSafeSpot(explorationWorld, targetX, targetZ);
@@ -202,24 +301,87 @@ public class ExplorationManager extends SavedData {
             targetZ = safePos.getZ();
             int y = safePos.getY();
 
-            BlockPos.MutableBlockPos mutablePos = new BlockPos.MutableBlockPos();
-
-            // Construire la plateforme
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    BlockPos p = mutablePos.set(targetX + dx, y - 1, targetZ + dz);
-                    explorationWorld.setBlock(p, Blocks.OAK_PLANKS.defaultBlockState(), 2);
+            // Construction du camp
+            List<BlockPos> builtBlocks = new ArrayList<>();
+            Map<BlockPos, BlockPos> chestMapping = new HashMap<>();
+            
+            BlockPos firePos = new BlockPos(targetX, y, targetZ);
+            explorationWorld.setBlock(firePos, Blocks.CAMPFIRE.defaultBlockState(), 3);
+            builtBlocks.add(firePos);
+            
+            BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dz = -4; dz <= 4; dz++) {
+                    if (dx*dx + dz*dz <= 16) {
+                        mPos.set(targetX + dx, y - 1, targetZ + dz);
+                        if (!explorationWorld.getBlockState(mPos).isSolid() || explorationWorld.getBlockState(mPos).is(Blocks.GRASS_BLOCK) || explorationWorld.getBlockState(mPos).is(Blocks.WATER)) {
+                            explorationWorld.setBlock(mPos, Blocks.COARSE_DIRT.defaultBlockState(), 2);
+                            builtBlocks.add(mPos.immutable());
+                        }
+                        
+                        for (int dy = 0; dy <= 3; dy++) {
+                            mPos.set(targetX + dx, y + dy, targetZ + dz);
+                            if (explorationWorld.getBlockState(mPos).isSolid() || explorationWorld.getBlockState(mPos).is(Blocks.WATER)) {
+                                explorationWorld.setBlock(mPos, Blocks.AIR.defaultBlockState(), 2);
+                            }
+                        }
+                    }
                 }
             }
             
-            // Dégager l'espace au dessus
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    for (int dy = 0; dy <= 2; dy++) {
-                        BlockPos p = mutablePos.set(targetX + dx, y + dy, targetZ + dz);
-                        if (explorationWorld.getBlockState(p).isSolid()) {
-                            explorationWorld.setBlock(p, Blocks.AIR.defaultBlockState(), 2);
+            List<BlockPos> chestPositions = new ArrayList<>();
+            int chestRadius = 3;
+            int totalChests = 0;
+            for (List<BlockPos> l : explo.playerChests.values()) totalChests += l.size();
+            
+            if (totalChests > 0) {
+                double angleStep = (2 * Math.PI) / totalChests;
+                int currentChest = 0;
+                
+                for (Map.Entry<String, List<BlockPos>> entry : explo.playerChests.entrySet()) {
+                    String playerName = entry.getKey();
+                    for (BlockPos sourcePos : entry.getValue()) {
+                        double angle = currentChest * angleStep;
+                        int cx = targetX + (int)(Math.cos(angle) * chestRadius);
+                        int cz = targetZ + (int)(Math.sin(angle) * chestRadius);
+                        BlockPos destPos = new BlockPos(cx, y, cz);
+                        
+                        Direction facing = Direction.getNearest(targetX - cx, 0, targetZ - cz);
+                        
+                        explorationWorld.setBlock(destPos, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing), 3);
+                        builtBlocks.add(destPos);
+                        
+                        BlockEntity destBe = explorationWorld.getBlockEntity(destPos);
+                        BlockEntity sourceBe = originLevel.getBlockEntity(sourcePos);
+                        
+                        if (destBe instanceof ChestBlockEntity destChest && sourceBe instanceof ChestBlockEntity sourceChest) {
+                            if (sourceChest.hasCustomName()) destChest.setCustomName(sourceChest.getCustomName());
+                            else destChest.setCustomName(Component.literal("Coffre de " + playerName));
+                            
+                            NonNullList<ItemStack> items = NonNullList.withSize(sourceChest.getContainerSize(), ItemStack.EMPTY);
+                            for (int i = 0; i < sourceChest.getContainerSize(); i++) items.set(i, sourceChest.getItem(i).copy());
+                            for (int i = 0; i < items.size(); i++) destChest.setItem(i, items.get(i));
+                            
+                            sourceChest.clearContent();
+                            sourceChest.setChanged();
+                            originLevel.sendBlockUpdated(sourcePos, originLevel.getBlockState(sourcePos), originLevel.getBlockState(sourcePos), 3);
+                            
+                            chestMapping.put(destPos, sourcePos);
                         }
+                        currentChest++;
+                    }
+                }
+            }
+            
+            if (totalChests < 8) {
+                for (int i = 0; i < 4; i++) {
+                    double angle = (i * Math.PI / 2) + (Math.PI / 4);
+                    int lx = targetX + (int)(Math.cos(angle) * 2);
+                    int lz = targetZ + (int)(Math.sin(angle) * 2);
+                    BlockPos logPos = new BlockPos(lx, y, lz);
+                    if (explorationWorld.getBlockState(logPos).isAir()) {
+                        explorationWorld.setBlock(logPos, Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.Y), 3);
+                        builtBlocks.add(logPos);
                     }
                 }
             }
@@ -228,11 +390,13 @@ public class ExplorationManager extends SavedData {
 
             for (ServerPlayer player : players) {
                 player.teleportTo(explorationWorld, targetX + 0.5, y, targetZ + 0.5, 0, 0);
-                player.sendSystemMessage(Component.literal("Bienvenue dans l'Exploration !"));
+                player.sendSystemMessage(Component.literal("Bienvenue au camp d'exploration !"));
                 player.getPersistentData().putLong("ExplorationOrigin", explo.origin.asLong());
             }
             
-            return finalSpawn;
+            int durationTicks = explo.durationMinutes > 0 ? explo.durationMinutes * 60 * 20 : 30 * 20;
+            return new ActiveExploration(finalSpawn, durationTicks, explo.origin, chestMapping, builtBlocks);
+            
         } else {
             System.err.println("Erreur: Le monde d'exploration n'est pas chargé !");
             return null;
@@ -263,11 +427,7 @@ public class ExplorationManager extends SavedData {
                 }
             }
         }
-        
-        level.getChunk(startX >> 4, startZ >> 4);
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING, startX, startZ);
-        if (y < 63) y = 63;
-        return new BlockPos(startX, y + 1, startZ);
+        return new BlockPos(startX, 150, startZ);
     }
     
     private boolean isAreaClear(ServerLevel level, BlockPos center) {
@@ -298,12 +458,20 @@ public class ExplorationManager extends SavedData {
         public int durationMinutes;
         public ExplorationState state = ExplorationState.COUNTDOWN;
         public int targetX;
+        public int requiredPlayers;
+        public int paidAmount;
+        public Map<String, List<BlockPos>> playerChests;
+        public UUID displayUUID;
 
-        public PendingExploration(BlockPos origin, int durationMinutes, int targetX) {
+        public PendingExploration(BlockPos origin, int durationMinutes, int targetX, int requiredPlayers, int paidAmount, Map<String, List<BlockPos>> playerChests, UUID displayUUID) {
             this.origin = origin;
             this.ticksRemaining = 30 * 20;
             this.durationMinutes = durationMinutes;
             this.targetX = targetX;
+            this.requiredPlayers = requiredPlayers;
+            this.paidAmount = paidAmount;
+            this.playerChests = playerChests;
+            this.displayUUID = displayUUID;
         }
         
         public PendingExploration(CompoundTag tag) {
@@ -311,8 +479,28 @@ public class ExplorationManager extends SavedData {
             this.ticksRemaining = tag.getInt("Ticks");
             this.durationMinutes = tag.getInt("Duration");
             this.targetX = tag.getInt("TargetX");
+            this.requiredPlayers = tag.getInt("RequiredPlayers");
+            this.paidAmount = tag.getInt("PaidAmount");
             if (tag.contains("State")) {
                 this.state = ExplorationState.valueOf(tag.getString("State"));
+            }
+            if (tag.hasUUID("DisplayUUID")) {
+                this.displayUUID = tag.getUUID("DisplayUUID");
+            }
+            
+            this.playerChests = new HashMap<>();
+            if (tag.contains("PlayerChests", Tag.TAG_LIST)) {
+                ListTag list = tag.getList("PlayerChests", Tag.TAG_COMPOUND);
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag c = list.getCompound(i);
+                    String name = c.getString("Name");
+                    List<BlockPos> chests = new ArrayList<>();
+                    long[] positions = c.getLongArray("Chests");
+                    for (long pos : positions) {
+                        chests.add(BlockPos.of(pos));
+                    }
+                    this.playerChests.put(name, chests);
+                }
             }
         }
 
@@ -322,7 +510,22 @@ public class ExplorationManager extends SavedData {
             tag.putInt("Ticks", ticksRemaining);
             tag.putInt("Duration", durationMinutes);
             tag.putInt("TargetX", targetX);
+            tag.putInt("RequiredPlayers", requiredPlayers);
+            tag.putInt("PaidAmount", paidAmount);
             tag.putString("State", state.name());
+            if (displayUUID != null) tag.putUUID("DisplayUUID", displayUUID);
+            
+            ListTag list = new ListTag();
+            for (Map.Entry<String, List<BlockPos>> entry : playerChests.entrySet()) {
+                CompoundTag c = new CompoundTag();
+                c.putString("Name", entry.getKey());
+                List<Long> positions = new ArrayList<>();
+                for (BlockPos pos : entry.getValue()) positions.add(pos.asLong());
+                c.putLongArray("Chests", positions);
+                list.add(c);
+            }
+            tag.put("PlayerChests", list);
+            
             return tag;
         }
     }
@@ -331,24 +534,63 @@ public class ExplorationManager extends SavedData {
         public BlockPos spawnPos;
         public int ticksRemaining;
         public BlockPos origin;
+        public int targetX;
+        public Map<BlockPos, BlockPos> chestMapping;
+        public List<BlockPos> builtBlocks;
         
-        public ActiveExploration(BlockPos spawnPos, int ticksRemaining, BlockPos origin) {
+        public ActiveExploration(BlockPos spawnPos, int ticksRemaining, BlockPos origin, Map<BlockPos, BlockPos> chestMapping, List<BlockPos> builtBlocks) {
             this.spawnPos = spawnPos;
+            this.targetX = spawnPos.getX();
             this.ticksRemaining = ticksRemaining;
             this.origin = origin;
+            this.chestMapping = chestMapping;
+            this.builtBlocks = builtBlocks;
         }
         
         public ActiveExploration(CompoundTag tag) {
             this.spawnPos = BlockPos.of(tag.getLong("SpawnPos"));
+            this.targetX = tag.getInt("TargetX");
             this.ticksRemaining = tag.getInt("Ticks");
             this.origin = BlockPos.of(tag.getLong("Origin"));
+            
+            this.chestMapping = new HashMap<>();
+            if (tag.contains("ChestMapping", Tag.TAG_LIST)) {
+                ListTag list = tag.getList("ChestMapping", Tag.TAG_COMPOUND);
+                for (int i = 0; i < list.size(); i++) {
+                    CompoundTag c = list.getCompound(i);
+                    chestMapping.put(BlockPos.of(c.getLong("Dest")), BlockPos.of(c.getLong("Source")));
+                }
+            }
+            
+            this.builtBlocks = new ArrayList<>();
+            if (tag.contains("BuiltBlocks")) {
+                long[] positions = tag.getLongArray("BuiltBlocks");
+                for (long pos : positions) {
+                    builtBlocks.add(BlockPos.of(pos));
+                }
+            }
         }
         
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.putLong("SpawnPos", spawnPos.asLong());
+            tag.putInt("TargetX", targetX);
             tag.putInt("Ticks", ticksRemaining);
             tag.putLong("Origin", origin.asLong());
+            
+            ListTag list = new ListTag();
+            for (Map.Entry<BlockPos, BlockPos> entry : chestMapping.entrySet()) {
+                CompoundTag c = new CompoundTag();
+                c.putLong("Dest", entry.getKey().asLong());
+                c.putLong("Source", entry.getValue().asLong());
+                list.add(c);
+            }
+            tag.put("ChestMapping", list);
+            
+            List<Long> builtPos = new ArrayList<>();
+            for (BlockPos pos : builtBlocks) builtPos.add(pos.asLong());
+            tag.putLongArray("BuiltBlocks", builtPos);
+            
             return tag;
         }
     }

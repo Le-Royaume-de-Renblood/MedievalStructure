@@ -1,6 +1,7 @@
 package fr.renblood.medievalstructures.init;
 
 import fr.renblood.medievalstructures.MedievalStructures;
+import fr.renblood.medievalstructures.client.renderer.ExplorationHallBlockRenderer;
 import fr.renblood.medievalstructures.client.renderer.InnStructureBlockRenderer;
 import fr.renblood.medievalstructures.gui.ExplorationHallScreen;
 import fr.renblood.medievalstructures.gui.InnCustomerScreen;
@@ -21,6 +22,7 @@ public class ClientSetup {
             MenuScreens.register(ModMenuTypes.INN_CUSTOMER_MENU.get(), InnCustomerScreen::new);
             MenuScreens.register(ModMenuTypes.EXPLORATION_HALL_MENU.get(), ExplorationHallScreen::new);
             BlockEntityRenderers.register(ModBlockEntities.INN_STRUCTURE_BE.get(), InnStructureBlockRenderer::new);
+            BlockEntityRenderers.register(ModBlockEntities.EXPLORATION_HALL_BE.get(), ExplorationHallBlockRenderer::new);
         });
     }
 }

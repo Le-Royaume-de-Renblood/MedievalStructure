@@ -2,15 +2,11 @@ package fr.renblood.medievalstructures.network;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 public class PacketExplorationAction {
@@ -18,13 +14,33 @@ public class PacketExplorationAction {
     private final int duration;
     private final List<PlayerConfig> playerConfigs;
 
+    public enum InvitationStatus {
+        PENDING,
+        ACCEPTED,
+        DECLINED
+    }
+
     public static class PlayerConfig {
         public int chestCount;
         public int animalCount;
+        public String playerName;
+        public UUID playerUUID;
+        public InvitationStatus status;
 
         public PlayerConfig(int chestCount, int animalCount) {
+            this(chestCount, animalCount, "", null, InvitationStatus.PENDING);
+        }
+
+        public PlayerConfig(int chestCount, int animalCount, String playerName) {
+            this(chestCount, animalCount, playerName, null, InvitationStatus.PENDING);
+        }
+        
+        public PlayerConfig(int chestCount, int animalCount, String playerName, UUID uuid, InvitationStatus status) {
             this.chestCount = chestCount;
             this.animalCount = animalCount;
+            this.playerName = playerName;
+            this.playerUUID = uuid;
+            this.status = status;
         }
     }
 
@@ -41,6 +57,12 @@ public class PacketExplorationAction {
         for (PlayerConfig config : msg.playerConfigs) {
             buf.writeInt(config.chestCount);
             buf.writeInt(config.animalCount);
+            buf.writeUtf(config.playerName != null ? config.playerName : "");
+            buf.writeBoolean(config.playerUUID != null);
+            if (config.playerUUID != null) {
+                buf.writeUUID(config.playerUUID);
+            }
+            buf.writeEnum(config.status);
         }
     }
 
@@ -50,34 +72,22 @@ public class PacketExplorationAction {
         int size = buf.readInt();
         List<PlayerConfig> configs = new ArrayList<>();
         for (int i = 0; i < size; i++) {
-            configs.add(new PlayerConfig(buf.readInt(), buf.readInt()));
+            int chests = buf.readInt();
+            int animals = buf.readInt();
+            String name = buf.readUtf();
+            UUID uuid = null;
+            if (buf.readBoolean()) {
+                uuid = buf.readUUID();
+            }
+            InvitationStatus status = buf.readEnum(InvitationStatus.class);
+            configs.add(new PlayerConfig(chests, animals, name, uuid, status));
         }
         return new PacketExplorationAction(pos, duration, configs);
     }
 
     public static void handle(PacketExplorationAction msg, Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().enqueueWork(() -> {
-            ServerPlayer player = ctx.get().getSender();
-            if (player != null) {
-                Level level = player.level();
-                BlockPos pos = msg.pos;
-
-                // Simulation : Poser 2 coffres à gauche et à droite
-                BlockState chestState = Blocks.CHEST.defaultBlockState();
-                level.setBlock(pos.east(), chestState, 3);
-                level.setBlock(pos.west(), chestState, 3);
-                
-                // Récapitulatif dans le chat
-                player.sendSystemMessage(Component.literal("--- Exploration Organisée ---"));
-                player.sendSystemMessage(Component.literal("Durée : " + msg.duration + " min"));
-                player.sendSystemMessage(Component.literal("Nombre de joueurs : " + msg.playerConfigs.size()));
-                
-                for (int i = 0; i < msg.playerConfigs.size(); i++) {
-                    PlayerConfig config = msg.playerConfigs.get(i);
-                    player.sendSystemMessage(Component.literal("Joueur " + (i + 1) + " : " + config.chestCount + " coffres, " + config.animalCount + " animaux"));
-                }
-            }
-        });
+        // Ce paquet n'est plus utilisé directement pour l'action, mais la classe interne PlayerConfig est partagée.
+        // La logique est dans PacketSaveExploration.
         ctx.get().setPacketHandled(true);
     }
 }

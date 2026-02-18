@@ -22,12 +22,17 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvider {
 
     private int savedDuration = 0;
     private List<PacketExplorationAction.PlayerConfig> savedConfigs = new ArrayList<>();
     private boolean hasExplorationReady = false;
+    
+    // Pour l'affichage client
+    private int ticksRemaining = 0;
+    private boolean waitingForPlayers = false;
 
     public ExplorationHallBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.EXPLORATION_HALL_BE.get(), pos, state);
@@ -38,9 +43,7 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
         this.savedConfigs = new ArrayList<>(configs);
         this.hasExplorationReady = true;
         setChanged();
-        if (level != null) {
-            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
-        }
+        sync();
     }
     
     public void clearExploration() {
@@ -48,6 +51,49 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
         this.savedConfigs.clear();
         this.savedDuration = 0;
         setChanged();
+        sync();
+    }
+    
+    public void updatePlayerStatus(UUID playerUUID, PacketExplorationAction.InvitationStatus status) {
+        boolean changed = false;
+        for (PacketExplorationAction.PlayerConfig config : savedConfigs) {
+            if (playerUUID.equals(config.playerUUID)) {
+                config.status = status;
+                changed = true;
+                break;
+            }
+        }
+        
+        if (changed) {
+            setChanged();
+            sync();
+        }
+    }
+    
+    public void removePlayer(int index) {
+        if (index >= 0 && index < savedConfigs.size()) {
+            savedConfigs.remove(index);
+            setChanged();
+            sync();
+        }
+    }
+    
+    public void setCountdown(int ticks, boolean waiting) {
+        this.ticksRemaining = ticks;
+        this.waitingForPlayers = waiting;
+        setChanged();
+        sync();
+    }
+    
+    public int getTicksRemaining() {
+        return ticksRemaining;
+    }
+    
+    public boolean isWaitingForPlayers() {
+        return waitingForPlayers;
+    }
+    
+    private void sync() {
         if (level != null) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
@@ -69,6 +115,9 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         tag.putBoolean("HasExploration", hasExplorationReady);
+        tag.putInt("TicksRemaining", ticksRemaining);
+        tag.putBoolean("WaitingForPlayers", waitingForPlayers);
+        
         if (hasExplorationReady) {
             tag.putInt("Duration", savedDuration);
             ListTag list = new ListTag();
@@ -76,6 +125,9 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
                 CompoundTag c = new CompoundTag();
                 c.putInt("Chests", config.chestCount);
                 c.putInt("Animals", config.animalCount);
+                c.putString("Name", config.playerName != null ? config.playerName : "");
+                if (config.playerUUID != null) c.putUUID("UUID", config.playerUUID);
+                c.putString("Status", config.status.name());
                 list.add(c);
             }
             tag.put("Configs", list);
@@ -86,13 +138,22 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
     public void load(CompoundTag tag) {
         super.load(tag);
         hasExplorationReady = tag.getBoolean("HasExploration");
+        ticksRemaining = tag.getInt("TicksRemaining");
+        waitingForPlayers = tag.getBoolean("WaitingForPlayers");
+
         if (hasExplorationReady) {
             savedDuration = tag.getInt("Duration");
             savedConfigs.clear();
             ListTag list = tag.getList("Configs", Tag.TAG_COMPOUND);
             for (int i = 0; i < list.size(); i++) {
                 CompoundTag c = list.getCompound(i);
-                savedConfigs.add(new PacketExplorationAction.PlayerConfig(c.getInt("Chests"), c.getInt("Animals")));
+                String name = c.getString("Name");
+                UUID uuid = c.hasUUID("UUID") ? c.getUUID("UUID") : null;
+                PacketExplorationAction.InvitationStatus status = PacketExplorationAction.InvitationStatus.PENDING;
+                if (c.contains("Status")) {
+                    status = PacketExplorationAction.InvitationStatus.valueOf(c.getString("Status"));
+                }
+                savedConfigs.add(new PacketExplorationAction.PlayerConfig(c.getInt("Chests"), c.getInt("Animals"), name, uuid, status));
             }
         }
     }
@@ -116,7 +177,6 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) {
-        // On passe la position au menu pour que le client puisse la récupérer
         return new ExplorationHallMenu(id, inventory, ContainerLevelAccess.create(level, worldPosition), worldPosition);
     }
 }

@@ -9,6 +9,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.block.entity.InnStructureBlockEntity;
 import fr.renblood.medievalstructures.init.ModDimensions;
 import fr.renblood.medievalstructures.inn.Inn;
@@ -19,6 +20,7 @@ import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import fr.renblood.medievalstructures.manager.DefinitionModeManager;
 import fr.renblood.medievalstructures.manager.ExplorationManager;
 import fr.renblood.medievalstructures.manager.RoomCreationManager;
+import fr.renblood.medievalstructures.network.PacketExplorationAction;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -61,14 +63,21 @@ public class ModCommands {
                 .then(Commands.literal("validate")
                         .executes(ModCommands::validate)));
 
-        // Commandes /exploration (Admin)
+        // Commandes /exploration
         dispatcher.register(Commands.literal("exploration")
-                .requires(s -> s.hasPermission(2))
                 .then(Commands.literal("join")
+                        .requires(s -> s.hasPermission(2)) // Admin only pour join direct
                         .executes(ModCommands::joinExploration))
                 .then(Commands.literal("debug")
+                        .requires(s -> s.hasPermission(2))
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                .executes(ModCommands::setExplorationDebug))));
+                                .executes(ModCommands::setExplorationDebug)))
+                .then(Commands.literal("accept")
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(ctx -> respondInvitation(ctx, PacketExplorationAction.InvitationStatus.ACCEPTED))))
+                .then(Commands.literal("decline")
+                        .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                .executes(ctx -> respondInvitation(ctx, PacketExplorationAction.InvitationStatus.DECLINED)))));
 
         // Commandes /auberge (Admin)
         LiteralArgumentBuilder<CommandSourceStack> aubergeCommand = Commands.literal("auberge")
@@ -164,13 +173,36 @@ public class ModCommands {
                                                         .executes(ModCommands::createProp))))))
                 .then(Commands.literal("remove")
                         .then(Commands.argument("innName", StringArgumentType.string()).suggests(SUGGEST_INN_NAMES)
-                                .then(Commands.argument("id", IntegerArgumentType.integer(1))
-                                        .executes(ModCommands::removeProp))))
+                        .then(Commands.argument("id", IntegerArgumentType.integer(1))
+                                .executes(ModCommands::removeProp))))
                 .then(Commands.literal("list")
                         .then(Commands.argument("innName", StringArgumentType.string()).suggests(SUGGEST_INN_NAMES)
                                 .executes(ModCommands::listProps))));
 
         dispatcher.register(aubergeCommand);
+    }
+
+    private static int respondInvitation(CommandContext<CommandSourceStack> context, PacketExplorationAction.InvitationStatus status) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        BlockPos pos = BlockPosArgument.getLoadedBlockPos(context, "pos");
+        ServerLevel level = context.getSource().getLevel();
+        
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof ExplorationHallBlockEntity hall) {
+            hall.updatePlayerStatus(player.getUUID(), status);
+            
+            if (status == PacketExplorationAction.InvitationStatus.ACCEPTED) {
+                context.getSource().sendSuccess(() -> Component.literal("Invitation acceptée !").withStyle(net.minecraft.ChatFormatting.GREEN), true);
+            } else {
+                context.getSource().sendSuccess(() -> Component.literal("Invitation refusée.").withStyle(net.minecraft.ChatFormatting.RED), true);
+                // Optionnel : Supprimer le joueur de la liste s'il refuse ?
+                // hall.removePlayer(player.getUUID()); // Il faudrait implémenter removePlayer par UUID
+            }
+            return 1;
+        } else {
+            context.getSource().sendFailure(Component.literal("Exploration introuvable ou expirée."));
+            return 0;
+        }
     }
 
     private static int joinExploration(CommandContext<CommandSourceStack> context) {

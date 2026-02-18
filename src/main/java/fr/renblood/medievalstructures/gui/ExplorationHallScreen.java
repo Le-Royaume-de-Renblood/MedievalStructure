@@ -3,15 +3,13 @@ package fr.renblood.medievalstructures.gui;
 import com.mojang.blaze3d.systems.RenderSystem;
 import fr.renblood.medievalstructures.MedievalStructures;
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
-import fr.renblood.medievalstructures.network.PacketExplorationAction;
-import fr.renblood.medievalstructures.network.PacketHandler;
-import fr.renblood.medievalstructures.network.PacketLaunchExploration;
-import fr.renblood.medievalstructures.network.PacketSaveExploration;
+import fr.renblood.medievalstructures.network.*;
 import fr.renblood.medievalstructures.util.ExplorationCostCalculator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -36,13 +34,15 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
 
     // Données de création
     private int selectedDuration = 20;
-    private int selectedPlayerCount = 1;
     private List<PacketExplorationAction.PlayerConfig> playerConfigs = new ArrayList<>();
     private int currentPlayerIndex = 0;
     
     // Widgets Création
     private CycleButton<Integer> durationButton;
-    private CycleButton<Integer> playerCountButton;
+    private EditBox playerNameBox;
+    private Button addPlayerButton;
+    private Button removePlayerButton;
+    
     private Button prevPlayerButton;
     private Button nextPlayerButton;
     private CycleButton<Integer> chestButton;
@@ -54,18 +54,30 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
     private Button newExplorationButton;
     private Button launchButton;
     private Button viewButton;
+    private Button cancelButton;
     
     // Widgets Visualisation
     private Button viewBackButton;
     private Button viewPrevPlayerButton;
     private Button viewNextPlayerButton;
+    private Button resendInviteButton;
+    private Button removePlayerViewButton;
     private int viewPlayerIndex = 0;
+    
+    private long lastInviteTime = 0;
+    private long lastHighlightRequest = 0;
+    
+    private boolean isDebugMode = false;
 
     public ExplorationHallScreen(ExplorationHallMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        this.imageWidth = 226; // Agrandissement
+        this.imageWidth = 226;
         this.imageHeight = 166;
-        initPlayerConfigsData(1);
+        
+        playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 1, Minecraft.getInstance().player.getName().getString()));
+        
+        // Initialiser le debug mode depuis le menu
+        this.isDebugMode = menu.isDebugMode();
     }
 
     @Override
@@ -73,6 +85,20 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         super.init();
         initWidgets();
         updateVisibility();
+        requestHighlight();
+        requestState(); // Demander l'état (debug)
+    }
+    
+    private void requestHighlight() {
+        if (this.menu.getPos() != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketRequestChestHighlight(this.menu.getPos()));
+        }
+    }
+    
+    private void requestState() {
+        if (this.menu.getPos() != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketRequestExplorationState(this.menu.getPos()));
+        }
     }
     
     @Override
@@ -80,53 +106,90 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         // On ne dessine pas les titres par défaut (Inventory, etc.)
     }
     
-    public void updateExplorationState(boolean hasExploration) {
-        // Appelé par le packet de sync
-        // On force la mise à jour des boutons du menu principal
-        if (currentState == ScreenState.MAIN_MENU) {
-            if (launchButton != null) launchButton.active = hasExploration;
-            if (viewButton != null) viewButton.active = hasExploration;
+    public void updateExplorationState(boolean hasExploration, boolean isDebug) {
+        this.isDebugMode = isDebug;
+        if (this.menu != null) this.menu.setDebugMode(isDebug);
+        
+        if (launchButton != null) launchButton.active = hasExploration;
+        if (viewButton != null) viewButton.active = hasExploration;
+    }
+    
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Si le champ de texte a le focus, on empêche la fermeture avec E
+        if (playerNameBox != null && playerNameBox.isFocused()) {
+            if (keyCode == 256) { // Echap
+                playerNameBox.setFocused(false);
+                return true;
+            }
+            if (playerNameBox.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+            // Empêcher la fermeture avec E si on écrit
+            if (this.minecraft.options.keyInventory.matches(keyCode, scanCode)) {
+                return true;
+            }
         }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private void initWidgets() {
         int x = (width - imageWidth) / 2;
         int y = (height - imageHeight) / 2;
-        
-        // Centre horizontal relatif au GUI
         int centerX = x + imageWidth / 2;
 
         // --- MENU PRINCIPAL ---
         newExplorationButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.new"), b -> {
             currentState = ScreenState.CREATE_EXPLORATION;
             updateVisibility();
-        }).bounds(centerX - 78, y + 30, 156, 20).build());
+        }).bounds(centerX - 78, y + 20, 156, 20).build());
 
         launchButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.launch"), this::onLaunch)
-                .bounds(centerX - 78, y + 60, 156, 20).build());
+                .bounds(centerX - 78, y + 45, 156, 20).build());
 
         viewButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.view"), b -> {
             currentState = ScreenState.VIEW_EXPLORATION;
             viewPlayerIndex = 0;
             updateVisibility();
-        }).bounds(centerX - 78, y + 90, 156, 20).build());
+        }).bounds(centerX - 78, y + 70, 156, 20).build());
+        
+        cancelButton = addRenderableWidget(Button.builder(Component.literal("Annuler Lancement"), this::onCancel)
+                .bounds(centerX - 78, y + 95, 156, 20).build());
 
         // --- CRÉATION ---
         List<Integer> durations = Arrays.asList(20, 40, 60, 90, 120, 150);
         durationButton = addRenderableWidget(CycleButton.builder(this::formatDuration)
                 .withValues(durations)
                 .withInitialValue(selectedDuration)
-                .create(centerX - 78, y + 20, 156, 20, Component.translatable("gui.medieval_structures.exploration.duration"), (cycleButton, value) -> selectedDuration = value));
+                .create(centerX - 78, y + 15, 156, 20, Component.translatable("gui.medieval_structures.exploration.duration"), (cycleButton, value) -> selectedDuration = value));
 
-        List<Integer> playerCounts = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-        playerCountButton = addRenderableWidget(CycleButton.builder(this::formatPlayerCount)
-                .withValues(playerCounts)
-                .withInitialValue(selectedPlayerCount)
-                .create(centerX - 78, y + 45, 156, 20, Component.translatable("gui.medieval_structures.exploration.players"), (cycleButton, value) -> {
-                    selectedPlayerCount = value;
-                    updatePlayerConfigs(value);
-                }));
+        // Ajout de joueur
+        playerNameBox = new EditBox(this.font, centerX - 78, y + 40, 100, 20, Component.literal("Pseudo"));
+        addRenderableWidget(playerNameBox);
+        
+        addPlayerButton = addRenderableWidget(Button.builder(Component.literal("+"), b -> {
+            String name = playerNameBox.getValue();
+            if (!name.isEmpty()) {
+                boolean exists = playerConfigs.stream().anyMatch(c -> c.playerName.equalsIgnoreCase(name));
+                if (!exists) {
+                    playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 1, name));
+                    playerNameBox.setValue("");
+                    currentPlayerIndex = playerConfigs.size() - 1;
+                    updateCreationWidgets();
+                }
+            }
+        }).bounds(centerX + 25, y + 40, 20, 20).build());
+        
+        removePlayerButton = addRenderableWidget(Button.builder(Component.literal("-"), b -> {
+            if (playerConfigs.size() > 1 && currentPlayerIndex > 0) {
+                playerConfigs.remove(currentPlayerIndex);
+                if (currentPlayerIndex >= playerConfigs.size()) currentPlayerIndex = playerConfigs.size() - 1;
+                updateCreationWidgets();
+            }
+        }).bounds(centerX + 48, y + 40, 20, 20).build());
 
+
+        // Navigation Config
         prevPlayerButton = addRenderableWidget(Button.builder(Component.literal("<"), b -> {
             if (currentPlayerIndex > 0) {
                 currentPlayerIndex--;
@@ -168,12 +231,20 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         // --- VISUALISATION ---
         viewPrevPlayerButton = addRenderableWidget(Button.builder(Component.literal("<"), b -> {
             if (viewPlayerIndex > 0) viewPlayerIndex--;
+            updateViewWidgets();
         }).bounds(centerX - 78, y + 75, 20, 20).build());
 
         viewNextPlayerButton = addRenderableWidget(Button.builder(Component.literal(">"), b -> {
             ExplorationHallBlockEntity be = getBlockEntity();
             if (be != null && viewPlayerIndex < be.getSavedConfigs().size() - 1) viewPlayerIndex++;
+            updateViewWidgets();
         }).bounds(centerX + 58, y + 75, 20, 20).build());
+        
+        resendInviteButton = addRenderableWidget(Button.builder(Component.literal("Relancer"), this::onResendInvite)
+                .bounds(centerX + 80, y + 60, 30, 20).build());
+        
+        removePlayerViewButton = addRenderableWidget(Button.builder(Component.literal("X"), this::onRemovePlayerView)
+                .bounds(centerX + 80, y + 85, 20, 20).build());
         
         viewBackButton = addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> {
             currentState = ScreenState.MAIN_MENU;
@@ -189,9 +260,12 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         if (newExplorationButton != null) newExplorationButton.visible = main;
         if (launchButton != null) launchButton.visible = main;
         if (viewButton != null) viewButton.visible = main;
+        if (cancelButton != null) cancelButton.visible = main;
 
         if (durationButton != null) durationButton.visible = create;
-        if (playerCountButton != null) playerCountButton.visible = create;
+        if (playerNameBox != null) playerNameBox.visible = create;
+        if (addPlayerButton != null) addPlayerButton.visible = create;
+        if (removePlayerButton != null) removePlayerButton.visible = create;
         if (prevPlayerButton != null) prevPlayerButton.visible = create;
         if (nextPlayerButton != null) nextPlayerButton.visible = create;
         if (chestButton != null) chestButton.visible = create;
@@ -202,16 +276,38 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         if (viewPrevPlayerButton != null) viewPrevPlayerButton.visible = view;
         if (viewNextPlayerButton != null) viewNextPlayerButton.visible = view;
         if (viewBackButton != null) viewBackButton.visible = view;
+        if (resendInviteButton != null) resendInviteButton.visible = view;
+        if (removePlayerViewButton != null) removePlayerViewButton.visible = view;
         
         if (main && launchButton != null && viewButton != null) {
             ExplorationHallBlockEntity be = getBlockEntity();
             boolean hasExplo = be != null && be.hasExplorationReady();
             launchButton.active = hasExplo;
             viewButton.active = hasExplo;
+            
+            if (hasExplo) {
+                boolean allAccepted = be.getSavedConfigs().stream()
+                        .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
+                
+                if (isDebugMode) {
+                    launchButton.active = true;
+                    launchButton.setMessage(Component.literal("Lancer (DEBUG)"));
+                } else {
+                    launchButton.active = allAccepted;
+                    if (!allAccepted) {
+                        launchButton.setMessage(Component.literal("En attente..."));
+                    } else {
+                        launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
+                    }
+                }
+            }
         }
         
         if (create) {
             updateCreationWidgets();
+        }
+        if (view) {
+            updateViewWidgets();
         }
     }
 
@@ -219,6 +315,24 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         if (playerConfigs.isEmpty()) return;
         if (chestButton != null) chestButton.setValue(playerConfigs.get(currentPlayerIndex).chestCount);
         if (animalButton != null) animalButton.setValue(playerConfigs.get(currentPlayerIndex).animalCount);
+        if (removePlayerButton != null) removePlayerButton.active = currentPlayerIndex > 0;
+    }
+    
+    private void updateViewWidgets() {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        if (be != null && !be.getSavedConfigs().isEmpty()) {
+            if (viewPlayerIndex >= be.getSavedConfigs().size()) viewPlayerIndex = be.getSavedConfigs().size() - 1;
+            PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
+            
+            if (resendInviteButton != null) {
+                resendInviteButton.visible = config.status == PacketExplorationAction.InvitationStatus.PENDING && viewPlayerIndex > 0;
+                resendInviteButton.active = System.currentTimeMillis() - lastInviteTime > 15000;
+            }
+            
+            if (removePlayerViewButton != null) {
+                removePlayerViewButton.visible = viewPlayerIndex > 0;
+            }
+        }
     }
 
     private void initPlayerConfigsData(int count) {
@@ -257,6 +371,32 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         }
     }
     
+    private void onCancel(Button button) {
+        BlockPos pos = this.menu.getPos();
+        if (pos != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketCancelExploration(pos));
+            this.onClose();
+        }
+    }
+    
+    private void onResendInvite(Button button) {
+        BlockPos pos = this.menu.getPos();
+        if (pos != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketResendInvitation(pos, viewPlayerIndex));
+            lastInviteTime = System.currentTimeMillis();
+            updateViewWidgets();
+        }
+    }
+    
+    private void onRemovePlayerView(Button button) {
+        BlockPos pos = this.menu.getPos();
+        if (pos != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketRemovePlayer(pos, viewPlayerIndex));
+            if (viewPlayerIndex > 0) viewPlayerIndex--;
+            updateViewWidgets();
+        }
+    }
+    
     private ExplorationHallBlockEntity getBlockEntity() {
         BlockPos pos = this.menu.getPos();
         if (pos != null && this.minecraft != null && this.minecraft.level != null) {
@@ -283,6 +423,12 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Rafraîchir la highlight toutes les secondes
+        if (System.currentTimeMillis() - lastHighlightRequest > 1000) {
+            requestHighlight();
+            lastHighlightRequest = System.currentTimeMillis();
+        }
+        
         renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         renderTooltip(guiGraphics, mouseX, mouseY);
@@ -298,10 +444,28 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
                 int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
                 String costStr = ExplorationCostCalculator.formatCost(cost);
                 guiGraphics.drawString(this.font, "Coût: " + costStr, x + 10, y + 120, 0x404040, false);
+                
+                boolean allAccepted = be.getSavedConfigs().stream()
+                        .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
+                if (launchButton != null) {
+                    if (isDebugMode) {
+                        launchButton.active = true;
+                        launchButton.setMessage(Component.literal("Lancer (DEBUG)"));
+                    } else {
+                        launchButton.active = allAccepted;
+                        if (!allAccepted) {
+                            launchButton.setMessage(Component.literal("En attente..."));
+                        } else {
+                            launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
+                        }
+                    }
+                }
             }
         } else if (currentState == ScreenState.CREATE_EXPLORATION) {
             guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.create"), x + 8, y + 6, 0x404040, false);
-            Component label = Component.translatable("gui.medieval_structures.exploration.player_config", (currentPlayerIndex + 1));
+            
+            String playerName = playerConfigs.get(currentPlayerIndex).playerName;
+            Component label = Component.literal("Config: " + playerName);
             int textWidth = this.font.width(label);
             guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, 0x404040, false);
             
@@ -317,29 +481,24 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
                 guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.players_val", be.getSavedConfigs().size()), x + 10, y + 45, 0x404040, false);
                 
                 if (!be.getSavedConfigs().isEmpty()) {
+                    if (viewPlayerIndex >= be.getSavedConfigs().size()) viewPlayerIndex = 0;
                     PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
-                    Component label = Component.translatable("gui.medieval_structures.exploration.player_config", (viewPlayerIndex + 1));
+                    
+                    String name = config.playerName;
+                    int color = 0x404040;
+                    String statusText = "";
+                    switch (config.status) {
+                        case ACCEPTED: color = 0x00AA00; statusText = " (Accepté)"; break;
+                        case DECLINED: color = 0xAA0000; statusText = " (Refusé)"; break;
+                        case PENDING: color = 0xFFAA00; statusText = " (En attente)"; break;
+                    }
+                    
+                    Component label = Component.literal(name + statusText);
                     int textWidth = this.font.width(label);
-                    guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, 0x404040, false);
+                    guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, color, false);
                     
                     guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.chests_val", config.chestCount), centerX - 53, y + 80, 0x404040, false);
                     guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.animals_val", config.animalCount), centerX - 53, y + 105, 0x404040, false);
-                    
-                    // Afficher le coût individuel
-                    // On crée une liste temporaire avec juste ce joueur pour utiliser le calculateur
-                    List<PacketExplorationAction.PlayerConfig> singleConfig = new ArrayList<>();
-                    singleConfig.add(config);
-                    // Le coût du temps est divisé par le nombre de joueurs ? Non, le calculateur prend le total.
-                    // On veut juste le coût des extras pour ce joueur ? Ou sa part du total ?
-                    // Affichons le coût des extras (coffres + animaux) pour ce joueur
-                    // Car le coût du temps dépend du nombre total de joueurs.
-                    
-                    // Calcul manuel simple pour l'affichage
-                    // TODO: Mettre ça dans le calculateur si besoin
-                    // Mais ici on veut juste afficher "Coût joueur: X"
-                    
-                    // On va afficher le coût total de l'exploration divisé par le nombre de joueurs ? Non.
-                    // Affichons juste "Extras: X"
                 }
                 
                 int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());

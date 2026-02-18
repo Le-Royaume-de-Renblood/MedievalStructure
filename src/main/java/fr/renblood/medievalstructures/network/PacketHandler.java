@@ -27,5 +27,11 @@ public class PacketHandler {
         INSTANCE.registerMessage(id++, PacketSaveExploration.class, PacketSaveExploration::encode, PacketSaveExploration::decode, PacketSaveExploration::handle);
         INSTANCE.registerMessage(id++, PacketLaunchExploration.class, PacketLaunchExploration::encode, PacketLaunchExploration::decode, PacketLaunchExploration::handle);
         INSTANCE.registerMessage(id++, PacketSyncExplorationState.class, PacketSyncExplorationState::encode, PacketSyncExplorationState::decode, PacketSyncExplorationState::handle);
+        INSTANCE.registerMessage(id++, PacketCancelExploration.class, PacketCancelExploration::encode, PacketCancelExploration::decode, PacketCancelExploration::handle);
+        INSTANCE.registerMessage(id++, PacketResendInvitation.class, PacketResendInvitation::encode, PacketResendInvitation::decode, PacketResendInvitation::handle);
+        INSTANCE.registerMessage(id++, PacketRemovePlayer.class, PacketRemovePlayer::encode, PacketRemovePlayer::decode, PacketRemovePlayer::handle);
+        INSTANCE.registerMessage(id++, PacketHighlightChests.class, PacketHighlightChests::encode, PacketHighlightChests::decode, PacketHighlightChests::handle);
+        INSTANCE.registerMessage(id++, PacketRequestChestHighlight.class, PacketRequestChestHighlight::encode, PacketRequestChestHighlight::decode, PacketRequestChestHighlight::handle);
+        INSTANCE.registerMessage(id++, PacketRequestExplorationState.class, PacketRequestExplorationState::encode, PacketRequestExplorationState::decode, PacketRequestExplorationState::handle);
     }
 }

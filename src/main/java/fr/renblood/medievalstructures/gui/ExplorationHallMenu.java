@@ -1,23 +1,30 @@
 package fr.renblood.medievalstructures.gui;
 
+import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.init.ModBlocks;
 import fr.renblood.medievalstructures.init.ModMenuTypes;
+import fr.renblood.medievalstructures.manager.ExplorationManager;
+import fr.renblood.medievalstructures.network.PacketHandler;
+import fr.renblood.medievalstructures.network.PacketSyncExplorationState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraftforge.network.PacketDistributor;
 
 public class ExplorationHallMenu extends AbstractContainerMenu {
     private final ContainerLevelAccess access;
     private final BlockPos pos;
+    private boolean isDebugMode = false;
 
     // Constructeur client (appelé par le Network)
     public ExplorationHallMenu(int id, Inventory inv, FriendlyByteBuf extraData) {
         this(id, inv, extraData.readBlockPos());
-        System.out.println("ExplorationHallMenu: Client constructor called");
     }
 
     // Constructeur interne pour le client
@@ -32,7 +39,26 @@ public class ExplorationHallMenu extends AbstractContainerMenu {
         super(ModMenuTypes.EXPLORATION_HALL_MENU.get(), id);
         this.access = access;
         this.pos = pos;
-        System.out.println("ExplorationHallMenu: Server constructor called");
+        
+        // Synchroniser l'état (Debug + Exploration) dès l'ouverture
+        if (inv.player instanceof ServerPlayer serverPlayer) {
+            boolean hasExploration = false;
+            BlockEntity be = inv.player.level().getBlockEntity(pos);
+            if (be instanceof ExplorationHallBlockEntity hall) {
+                hasExploration = hall.hasExplorationReady();
+            }
+            
+            PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> serverPlayer), 
+                    new PacketSyncExplorationState(hasExploration, ExplorationManager.DEBUG_MODE));
+        }
+    }
+    
+    public void setDebugMode(boolean debugMode) {
+        this.isDebugMode = debugMode;
+    }
+    
+    public boolean isDebugMode() {
+        return isDebugMode;
     }
 
     public BlockPos getPos() {
@@ -46,8 +72,6 @@ public class ExplorationHallMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        // DEBUG: Toujours vrai pour tester si le menu s'ouvre
-        return true; 
-        // return stillValid(access, player, ModBlocks.EXPLORATION_HALL_BLOCK.get());
+        return stillValid(access, player, ModBlocks.EXPLORATION_HALL_BLOCK.get());
     }
 }

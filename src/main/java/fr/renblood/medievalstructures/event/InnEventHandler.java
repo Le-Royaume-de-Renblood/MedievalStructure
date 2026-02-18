@@ -45,21 +45,57 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = MedievalStructures.MODID)
 public class InnEventHandler {
 
-    private static long lastDayTime = 0;
+    private static long lastDayTime = -1;
     private static final Random RANDOM = new Random();
+    private static int reminderTick = 0;
 
     @SubscribeEvent
     public static void onLevelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END || event.level.isClientSide) return;
 
         ServerLevel level = (ServerLevel) event.level;
+        
+        if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
+        
+        // Rappel d'activation toutes les 10 minutes (12000 ticks)
+        reminderTick++;
+        if (reminderTick >= 12000) {
+            reminderTick = 0;
+            checkInactiveInns(level);
+        }
+        
         long time = level.getDayTime();
+        
+        if (lastDayTime == -1) {
+            lastDayTime = time;
+            return;
+        }
+        
+        if (time < lastDayTime) {
+            lastDayTime = time;
+            return;
+        }
 
-        if (time % 24000 < 100 && lastDayTime % 24000 >= 23900) {
+        long currentDay = time / 24000;
+        long lastDay = lastDayTime / 24000;
+        
+        if (currentDay > lastDay) {
             handleNewDay(level);
         }
 
         lastDayTime = time;
+    }
+    
+    private static void checkInactiveInns(ServerLevel level) {
+        InnManager manager = InnManager.get(level);
+        for (Inn inn : manager.getInns()) {
+            if (!inn.isActive() && inn.getOwnerUUID() != null) {
+                ServerPlayer owner = level.getServer().getPlayerList().getPlayer(inn.getOwnerUUID());
+                if (owner != null) {
+                    owner.sendSystemMessage(Component.literal("Rappel : Votre auberge '" + inn.getName() + "' est inactive. Pensez à l'activer !").withStyle(net.minecraft.ChatFormatting.YELLOW));
+                }
+            }
+        }
     }
 
     private static void handleNewDay(ServerLevel level) {
@@ -90,7 +126,7 @@ public class InnEventHandler {
                             }
                         }
                     } else {
-                        // Si c'est un PNJ, on paie directement l'aubergiste (système existant)
+                        // Si c'est un PNJ
                         if (!room.isDirty()) {
                             double gain = room.getPrice() * penaltyFactor;
                             inn.addBalance(gain);
@@ -99,9 +135,7 @@ public class InnEventHandler {
                             if (ownerUUID != null) {
                                 ServerPlayer owner = level.getServer().getPlayerList().getPlayer(ownerUUID);
                                 if (owner != null) {
-                                    // XP pour PNJ (inchangé)
-//                                    MedievalCoinsIntegration.addInnkeeperXP(owner, 5);
-//                                    owner.sendSystemMessage(Component.literal("Gain de " + (int)gain + " pièces pour la chambre " + room.getNumber() + " (PNJ)"));
+                                    // XP pour PNJ
                                 }
                             }
                         }
