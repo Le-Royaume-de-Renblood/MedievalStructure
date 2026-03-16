@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -53,10 +54,13 @@ public class PacketInnAction {
                 Inn inn = manager.getInn(msg.innName);
 
                 if (inn != null) {
+                    boolean updated = false;
+                    
                     if (msg.action == 0) { // Toggle Active
                         if (inn.getOwnerUUID().equals(player.getUUID())) {
                             inn.setActive(!inn.isActive());
                             manager.setDirty();
+                            updated = true;
                             
                             // Mettre à jour le bloc
                             if (inn.getLocation() != null) {
@@ -70,15 +74,15 @@ public class PacketInnAction {
                     } else if (msg.action == 1) { // Rent Room (Customer)
                         InnRoom room = inn.getRoom(msg.roomNumber);
                         if (room != null && !room.isBusy() && !room.isDirty()) {
-                            // Vérifier si le joueur a assez d'argent pour le premier loyer
                             if (MedievalCoinsIntegration.removeMoney(player, room.getPrice())) {
                                 room.setBusy(true);
                                 room.setOccupantUUID(player.getUUID());
                                 room.setOccupantName(player.getName().getString());
-                                room.setBalance(0); // Solde initial (loyer payé)
+                                room.setBalance(0);
                                 
-                                inn.addBalance(room.getPrice()); // L'argent va au proprio
+                                inn.addBalance(room.getPrice());
                                 manager.setDirty();
+                                updated = true;
                                 
                                 player.sendSystemMessage(Component.literal("Vous avez loué la chambre " + msg.roomNumber + " pour " + (int)room.getPrice() + " pièces."));
                             } else {
@@ -94,6 +98,7 @@ public class PacketInnAction {
                                 MedievalCoinsIntegration.addMoney(player, amount);
                                 inn.setBalance(0);
                                 manager.setDirty();
+                                updated = true;
                                 player.sendSystemMessage(Component.literal("Vous avez récupéré " + (int)amount + " pièces."));
                             }
                         }
@@ -103,6 +108,7 @@ public class PacketInnAction {
                             if (employee != null) {
                                 inn.addEmployee(employee.getUUID(), employee.getName().getString());
                                 manager.setDirty();
+                                updated = true;
                                 player.sendSystemMessage(Component.literal("Employé ajouté : " + msg.extraData));
                             } else {
                                 player.sendSystemMessage(Component.literal("Joueur introuvable."));
@@ -114,6 +120,7 @@ public class PacketInnAction {
                                 UUID uuid = UUID.fromString(msg.extraData);
                                 inn.removeEmployee(uuid);
                                 manager.setDirty();
+                                updated = true;
                                 player.sendSystemMessage(Component.literal("Employé retiré."));
                             } catch (IllegalArgumentException e) {
                                 // UUID invalide
@@ -128,6 +135,7 @@ public class PacketInnAction {
                                 room.setOccupantName("");
                                 room.setOccupantUUID(null);
                                 manager.setDirty();
+                                updated = true;
                                 player.sendSystemMessage(Component.literal("Occupant " + occupant + " exclu de la chambre " + msg.roomNumber + "."));
                             }
                         }
@@ -138,8 +146,9 @@ public class PacketInnAction {
                                 double amountToPay = Double.parseDouble(msg.extraData);
                                 if (MedievalCoinsIntegration.removeMoney(player, amountToPay)) {
                                     room.addToBalance(amountToPay);
-                                    inn.addBalance(amountToPay); // L'argent va dans la caisse de l'auberge
+                                    inn.addBalance(amountToPay);
                                     manager.setDirty();
+                                    updated = true;
                                     player.sendSystemMessage(Component.literal("Vous avez payé " + (int)amountToPay + " pièces."));
                                 } else {
                                     player.sendSystemMessage(Component.literal("Vous n'avez pas assez d'argent."));
@@ -148,6 +157,11 @@ public class PacketInnAction {
                                 // Ignorer
                             }
                         }
+                    }
+                    
+                    // Si une modification a eu lieu, on renvoie les données mises à jour au joueur
+                    if (updated) {
+                        PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new PacketSyncInnData(inn));
                     }
                 }
             }

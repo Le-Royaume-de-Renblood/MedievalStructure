@@ -1,6 +1,5 @@
 package fr.renblood.medievalstructures.manager;
 
-import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.init.ModDimensions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,7 +12,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
@@ -24,7 +25,9 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.phys.AABB;
+import net.minecraftforge.fml.util.ObfuscationReflectionHelper;
 
+import java.lang.reflect.Method;
 import java.util.*;
 
 public class ExplorationManager extends SavedData {
@@ -70,13 +73,19 @@ public class ExplorationManager extends SavedData {
         while (it.hasNext()) {
             PendingExploration explo = it.next();
             if (explo.origin.equals(origin) && explo.state == ExplorationState.COUNTDOWN) {
-                updateBlockEntity(origin, 0, false); // Reset BE
+                removeCountdownDisplay(serverLevel(origin), explo.displayUUID);
                 it.remove();
                 setDirty();
                 return explo.paidAmount;
             }
         }
         return -1;
+    }
+    
+    // Helper pour récupérer le niveau (supposé Overworld pour l'instant)
+    private ServerLevel serverLevel(BlockPos pos) {
+        // TODO: Passer le niveau en paramètre ou stocker la dimension
+        return null; // A corriger dans l'appelant
     }
 
     public void startCountdown(ServerLevel level, BlockPos origin, int durationMinutes, int requiredPlayers, int paidAmount, Map<String, List<BlockPos>> playerChests) {
@@ -87,22 +96,53 @@ public class ExplorationManager extends SavedData {
             durationMinutes = 0;
         }
         
-        pendingExplorations.add(new PendingExploration(origin, durationMinutes, x, requiredPlayers, paidAmount, playerChests));
+        // Créer l'entité TextDisplay
+        Display.TextDisplay display = EntityType.TEXT_DISPLAY.create(level);
+        if (display != null) {
+            display.setPos(origin.getX() + 0.5, origin.getY() + 1.5, origin.getZ() + 0.5);
+            
+            // Utiliser CustomName comme fallback fiable
+            display.setCustomName(Component.literal("Préparation...").withStyle(net.minecraft.ChatFormatting.YELLOW));
+            display.setCustomNameVisible(true);
+            
+            // Tenter d'utiliser le texte interne du Display (plus joli)
+            setText(display, Component.literal("Préparation..."));
+            setBillboardConstraints(display, Display.BillboardConstraints.CENTER);
+            
+            level.addFreshEntity(display);
+            
+            pendingExplorations.add(new PendingExploration(origin, durationMinutes, x, requiredPlayers, paidAmount, playerChests, display.getUUID()));
+        } else {
+            pendingExplorations.add(new PendingExploration(origin, durationMinutes, x, requiredPlayers, paidAmount, playerChests, null));
+        }
         setDirty();
     }
     
-    private void updateBlockEntity(BlockPos pos, int ticks, boolean waiting) {
-        // Cette méthode doit être appelée sur le serveur, donc on a besoin du niveau
-        // Mais ExplorationManager est global. On va supposer que le bloc est dans l'Overworld.
-        // Si le bloc est ailleurs, il faudra stocker la dimension dans PendingExploration.
-        // Pour l'instant, on suppose Overworld.
-        // TODO: Gérer le niveau correctement si le bloc n'est pas dans l'Overworld
+    private void setText(Display.TextDisplay display, Component text) {
+        try {
+            Method m = ObfuscationReflectionHelper.findMethod(Display.TextDisplay.class, "m_269008_", Component.class);
+            m.invoke(display, text);
+        } catch (Exception e) {
+            try {
+                Method m = ObfuscationReflectionHelper.findMethod(Display.TextDisplay.class, "setText", Component.class);
+                m.invoke(display, text);
+            } catch (Exception ex) {
+                // Fallback déjà géré par setCustomName
+            }
+        }
     }
     
-    private void updateBlockEntity(ServerLevel level, BlockPos pos, int ticks, boolean waiting) {
-        BlockEntity be = level.getBlockEntity(pos);
-        if (be instanceof ExplorationHallBlockEntity hall) {
-            hall.setCountdown(ticks, waiting);
+    private void setBillboardConstraints(Display display, Display.BillboardConstraints constraints) {
+        try {
+            Method m = ObfuscationReflectionHelper.findMethod(Display.class, "m_269371_", Display.BillboardConstraints.class);
+            m.invoke(display, constraints);
+        } catch (Exception e) {
+            try {
+                Method m = ObfuscationReflectionHelper.findMethod(Display.class, "setBillboardConstraints", Display.BillboardConstraints.class);
+                m.invoke(display, constraints);
+            } catch (Exception ex) {
+                // Ignorer
+            }
         }
     }
 
@@ -121,16 +161,17 @@ public class ExplorationManager extends SavedData {
                         level.getPlayers(p -> p.distanceToSqr(explo.origin.getX(), explo.origin.getY(), explo.origin.getZ()) < 1000).forEach(p -> 
                             p.sendSystemMessage(Component.literal("En attente de joueurs... (" + playerCount + "/" + explo.requiredPlayers + ")").withStyle(net.minecraft.ChatFormatting.YELLOW))
                         );
-                        updateBlockEntity(level, explo.origin, explo.ticksRemaining, true);
+                        updateCountdownDisplay(level, explo.displayUUID, "En attente de joueurs (" + playerCount + "/" + explo.requiredPlayers + ")");
                     }
                     continue;
                 }
 
                 explo.ticksRemaining--;
                 
-                // Mise à jour du BE (toutes les secondes pour éviter trop de packets)
+                // Mise à jour du display
                 if (explo.ticksRemaining % 20 == 0) {
-                    updateBlockEntity(level, explo.origin, explo.ticksRemaining, false);
+                    int seconds = explo.ticksRemaining / 20;
+                    updateCountdownDisplay(level, explo.displayUUID, "Départ dans " + seconds + "s");
                 }
 
                 if (explo.ticksRemaining % 20 == 0) {
@@ -145,7 +186,7 @@ public class ExplorationManager extends SavedData {
                 }
 
                 if (explo.ticksRemaining <= 0) {
-                    updateBlockEntity(level, explo.origin, 0, false); // Reset BE
+                    removeCountdownDisplay(level, explo.displayUUID);
                     explo.state = ExplorationState.TELEPORTING;
                     explo.ticksRemaining = 5;
                     setDirty();
@@ -208,6 +249,27 @@ public class ExplorationManager extends SavedData {
                 itActive.remove();
                 setDirty();
             }
+        }
+    }
+    
+    private void updateCountdownDisplay(ServerLevel level, UUID uuid, String text) {
+        if (uuid == null) return;
+        Entity entity = level.getEntity(uuid);
+        if (entity != null) {
+            entity.setCustomName(Component.literal(text).withStyle(net.minecraft.ChatFormatting.YELLOW));
+            entity.setCustomNameVisible(true);
+            
+            if (entity instanceof Display.TextDisplay display) {
+                setText(display, Component.literal(text).withStyle(net.minecraft.ChatFormatting.YELLOW));
+            }
+        }
+    }
+    
+    private void removeCountdownDisplay(ServerLevel level, UUID uuid) {
+        if (uuid == null || level == null) return;
+        Entity entity = level.getEntity(uuid);
+        if (entity != null) {
+            entity.discard();
         }
     }
     
