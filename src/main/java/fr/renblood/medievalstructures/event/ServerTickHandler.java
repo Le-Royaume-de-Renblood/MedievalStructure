@@ -2,6 +2,7 @@ package fr.renblood.medievalstructures.event;
 
 import fr.renblood.medievalstructures.MedievalStructures;
 import fr.renblood.medievalstructures.manager.ExplorationManager;
+import fr.renblood.medievalstructures.manager.InnCustomerManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -14,6 +15,7 @@ public class ServerTickHandler {
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END && event.getServer().overworld() != null) {
             ExplorationManager.get(event.getServer().overworld()).tick(event.getServer());
+            InnCustomerManager.tick(event.getServer());
         }
     }
 }

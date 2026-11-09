@@ -66,14 +66,14 @@ public class PacketResendInvitation {
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.GREEN)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/exploration accept " + posStr))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/ms exploration accept " + posStr))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Rejoindre l'exploration"))));
         
         Component decline = Component.literal("[REFUSER]")
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.RED)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/exploration decline " + posStr))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/ms exploration decline " + posStr))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Refuser l'invitation"))));
         
         target.sendSystemMessage(Component.literal("--- Invitation Exploration (Rappel) ---").withStyle(ChatFormatting.GOLD));

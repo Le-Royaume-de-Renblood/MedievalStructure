@@ -154,7 +154,9 @@ public class ClientModEvents {
         if (highlightTimer > 0 && !highlightedProps.isEmpty()) {
             synchronized (highlightedProps) {
                 for (BlockPos pos : highlightedProps) {
-                    renderBox(poseStack, buffer, new AABB(pos), 0.0f, 1.0f, 1.0f, 1.0f); // Cyan
+                    renderBox(poseStack, buffer, new AABB(pos).inflate(0.08D).expandTowards(0.0D, 0.18D, 0.0D), 0.0f, 1.0f, 1.0f, 1.0f); // Cyan
+                    AABB beacon = new AABB(pos.getX() + 0.43D, pos.getY(), pos.getZ() + 0.43D, pos.getX() + 0.57D, pos.getY() + 4.0D, pos.getZ() + 0.57D);
+                    renderBox(poseStack, buffer, beacon, 0.0f, 0.75f, 1.0f, 0.95f);
                 }
             }
         }

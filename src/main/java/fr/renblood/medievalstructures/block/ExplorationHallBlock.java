@@ -2,6 +2,7 @@ package fr.renblood.medievalstructures.block;
 
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.gui.ExplorationHallMenu;
+import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -64,6 +65,10 @@ public class ExplorationHallBlock extends Block implements EntityBlock {
     @Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+            if (MedievalCoinsIntegration.getExplorerXP(serverPlayer) < 0) {
+                serverPlayer.sendSystemMessage(Component.literal("Il faut etre explorateur pour utiliser ce hall."));
+                return InteractionResult.CONSUME;
+            }
             NetworkHooks.openScreen(serverPlayer, new SimpleMenuProvider(
                     (id, inv, p) -> new ExplorationHallMenu(id, inv, ContainerLevelAccess.create(level, pos), pos),
                     Component.translatable("gui.medieval_structures.exploration_hall")

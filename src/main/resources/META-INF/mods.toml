@@ -61,8 +61,8 @@ side="BOTH"
 [[dependencies."${mod_id}"]]
 modId="medieval_coins"
 mandatory=true
-# Doit être au moins la version 1.0.0, et n'importe quelle version supérieure
-versionRange="[1.0.0,)"
+# Doit être au moins la version 1.0.42, et n'importe quelle version supérieure
+versionRange="[1.0.43,)"
 # Ce mod se charge APRES medieval_coins pour être sûr que tout est initialisé
 ordering="AFTER"
 side="BOTH"

@@ -4,6 +4,33 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
+def versionedBuildTasks = ['build', 'jar', 'reobfJar', 'pipelineTest', 'pipelineServer', 'pipelineAll']
+def shouldIncrementModVersion = gradle.startParameter.taskNames.any { requested ->
+    versionedBuildTasks.any { requested == it || requested.endsWith(":${it}") }
+}
+
+def incrementPatchVersionIfNeeded = {
+    if (!shouldIncrementModVersion) return mod_version
+
+    def propertiesFile = file('gradle.properties')
+    def propertiesText = propertiesFile.getText('UTF-8')
+    def matcher = propertiesText =~ /(?m)^mod_version=(\d+)\.(\d+)\.(\d+)(.*)$/
+    if (!matcher.find()) {
+        throw new GradleException("mod_version doit etre au format X.Y.Z dans gradle.properties pour l'increment automatique.")
+    }
+
+    def major = matcher.group(1)
+    def minor = matcher.group(2)
+    def patch = matcher.group(3).toInteger() + 1
+    def suffix = matcher.group(4)
+    def nextVersion = "${major}.${minor}.${patch}${suffix}"
+    propertiesFile.setText(propertiesText.replaceFirst(/(?m)^mod_version=.*$/, "mod_version=${nextVersion}"), 'UTF-8')
+    println "[MedievalStructures] Version de build auto-incrementee: ${mod_version} -> ${nextVersion}"
+    return nextVersion
+}
+
+ext.mod_version = incrementPatchVersionIfNeeded()
+
 group = mod_group_id
 version = mod_version
 
@@ -79,7 +106,7 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
-    destinationDirectory = file('C:\\Users\\alban\\AppData\\Roaming\\ModrinthApp\\profiles\\Test Mods RP\\mods')
+    destinationDirectory = layout.buildDirectory.dir('libs')
     //    destinationDirectory = file('C:\\Users\\yolol\\AppData\\Roaming\\ModrinthApp\\profiles\\Test Renblood\\mods')
     manifest {
         attributes([
@@ -92,6 +119,40 @@ tasks.named('jar', Jar).configure {
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
+}
+
+def testProfileMods = file('C:/Users/alban/AppData/Roaming/ModrinthApp/profiles/Test Mods RP/mods')
+def serverProfileMods = file('C:/Users/alban/AppData/Roaming/ModrinthApp/profiles/MAJ-RP-2024-1.20.1/mods')
+def localServerMods = file('D:/Projets/Projet/localhost/_server1.20.1/mods')
+def archiveMods = file('D:/Projets/Projet/mods')
+
+def installLatestJar = { File destination ->
+    delete fileTree(destination) { include "${mod_id}-*.jar" }
+    copy {
+        from tasks.named('jar').flatMap { it.archiveFile }
+        into destination
+    }
+}
+
+tasks.register('pipelineTest') {
+    dependsOn 'reobfJar'
+    doLast {
+        installLatestJar(testProfileMods)
+        copy { from tasks.named('jar').flatMap { it.archiveFile }; into archiveMods }
+    }
+}
+
+tasks.register('pipelineServer') {
+    dependsOn 'reobfJar'
+    doLast {
+        installLatestJar(serverProfileMods)
+        installLatestJar(localServerMods)
+        copy { from tasks.named('jar').flatMap { it.archiveFile }; into archiveMods }
+    }
+}
+
+tasks.register('pipelineAll') {
+    dependsOn 'pipelineTest', 'pipelineServer'
 }
 
 tasks.withType(JavaCompile).configureEach {

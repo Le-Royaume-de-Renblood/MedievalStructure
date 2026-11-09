@@ -3,6 +3,7 @@ package fr.renblood.medievalstructures.block.entity;
 import fr.renblood.medievalstructures.gui.ExplorationHallMenu;
 import fr.renblood.medievalstructures.init.ModBlockEntities;
 import fr.renblood.medievalstructures.network.PacketExplorationAction;
+import fr.renblood.medievalstructures.util.ExplorationProgression;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -21,7 +22,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvider {
@@ -29,6 +32,8 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
     private int savedDuration = 0;
     private List<PacketExplorationAction.PlayerConfig> savedConfigs = new ArrayList<>();
     private boolean hasExplorationReady = false;
+    private int completedExplorations = 0;
+    private final Map<UUID, Integer> completedByPlayer = new HashMap<>();
     
     // Pour l'affichage client
     private int ticksRemaining = 0;
@@ -111,12 +116,42 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
         return savedConfigs;
     }
 
+    public int getCompletedExplorations() {
+        return completedExplorations;
+    }
+
+    public int getHallLevel() {
+        return ExplorationProgression.getHallLevel(completedExplorations);
+    }
+
+    public int getCompletedExplorations(UUID playerUuid) {
+        return playerUuid == null ? 0 : completedByPlayer.getOrDefault(playerUuid, 0);
+    }
+
+    public void recordCompletedExploration(UUID launcherUuid) {
+        completedExplorations++;
+        if (launcherUuid != null) {
+            completedByPlayer.merge(launcherUuid, 1, Integer::sum);
+        }
+        setChanged();
+        sync();
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         tag.putBoolean("HasExploration", hasExplorationReady);
         tag.putInt("TicksRemaining", ticksRemaining);
         tag.putBoolean("WaitingForPlayers", waitingForPlayers);
+        tag.putInt("CompletedExplorations", completedExplorations);
+        ListTag completedPlayers = new ListTag();
+        for (Map.Entry<UUID, Integer> entry : completedByPlayer.entrySet()) {
+            CompoundTag c = new CompoundTag();
+            c.putUUID("UUID", entry.getKey());
+            c.putInt("Count", entry.getValue());
+            completedPlayers.add(c);
+        }
+        tag.put("CompletedByPlayer", completedPlayers);
         
         if (hasExplorationReady) {
             tag.putInt("Duration", savedDuration);
@@ -140,6 +175,15 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
         hasExplorationReady = tag.getBoolean("HasExploration");
         ticksRemaining = tag.getInt("TicksRemaining");
         waitingForPlayers = tag.getBoolean("WaitingForPlayers");
+        completedExplorations = tag.getInt("CompletedExplorations");
+        completedByPlayer.clear();
+        ListTag completedPlayers = tag.getList("CompletedByPlayer", Tag.TAG_COMPOUND);
+        for (int i = 0; i < completedPlayers.size(); i++) {
+            CompoundTag c = completedPlayers.getCompound(i);
+            if (c.hasUUID("UUID")) {
+                completedByPlayer.put(c.getUUID("UUID"), c.getInt("Count"));
+            }
+        }
 
         if (hasExplorationReady) {
             savedDuration = tag.getInt("Duration");

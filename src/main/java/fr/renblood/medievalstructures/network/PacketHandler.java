@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public class PacketHandler {
-    private static final String PROTOCOL_VERSION = "1";
+    private static final String PROTOCOL_VERSION = "2";
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(MedievalStructures.MODID, "main"),
             () -> PROTOCOL_VERSION,
@@ -33,5 +33,14 @@ public class PacketHandler {
         INSTANCE.registerMessage(id++, PacketHighlightChests.class, PacketHighlightChests::encode, PacketHighlightChests::decode, PacketHighlightChests::handle);
         INSTANCE.registerMessage(id++, PacketRequestChestHighlight.class, PacketRequestChestHighlight::encode, PacketRequestChestHighlight::decode, PacketRequestChestHighlight::handle);
         INSTANCE.registerMessage(id++, PacketRequestExplorationState.class, PacketRequestExplorationState::encode, PacketRequestExplorationState::decode, PacketRequestExplorationState::handle);
+        INSTANCE.registerMessage(id++, PacketInnMenuAction.class, PacketInnMenuAction::encode, PacketInnMenuAction::decode, PacketInnMenuAction::handle);
+        INSTANCE.registerMessage(id++, PacketRequestInnReferences.class, PacketRequestInnReferences::encode, PacketRequestInnReferences::decode, PacketRequestInnReferences::handle);
+        INSTANCE.registerMessage(id++, PacketSyncInnReferences.class, PacketSyncInnReferences::encode, PacketSyncInnReferences::decode, PacketSyncInnReferences::handle);
+        INSTANCE.registerMessage(id++, PacketOpenInnTradeCatalog.class, PacketOpenInnTradeCatalog::encode, PacketOpenInnTradeCatalog::decode, PacketOpenInnTradeCatalog::handle);
+        INSTANCE.registerMessage(id++, PacketInnReferenceAdminAction.class, PacketInnReferenceAdminAction::encode, PacketInnReferenceAdminAction::decode, PacketInnReferenceAdminAction::handle);
+        INSTANCE.registerMessage(id++, PacketSyncInnReferenceSuggestion.class, PacketSyncInnReferenceSuggestion::encode, PacketSyncInnReferenceSuggestion::decode, PacketSyncInnReferenceSuggestion::handle);
+        INSTANCE.registerMessage(id++, PacketRequestInnRoutes.class, PacketRequestInnRoutes::encode, PacketRequestInnRoutes::decode, PacketRequestInnRoutes::handle);
+        INSTANCE.registerMessage(id++, PacketSyncInnRoutes.class, PacketSyncInnRoutes::encode, PacketSyncInnRoutes::decode, PacketSyncInnRoutes::handle);
+        INSTANCE.registerMessage(id++, PacketInnRouteAction.class, PacketInnRouteAction::encode, PacketInnRouteAction::decode, PacketInnRouteAction::handle);
     }
 }

@@ -1,6 +1,8 @@
 package fr.renblood.medievalstructures.network;
 
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
+import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
+import fr.renblood.medievalstructures.util.ExplorationProgression;
 import fr.renblood.medievalstructures.util.ExplorationUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -74,6 +76,18 @@ public class PacketSaveExploration {
                 Level level = player.level();
                 BlockEntity be = level.getBlockEntity(msg.pos);
                 if (be instanceof ExplorationHallBlockEntity hall) {
+                    if (!(level instanceof ServerLevel serverLevel)
+                            || !player.blockPosition().closerThan(msg.pos, 8.0D)
+                            || msg.duration <= 0
+                            || msg.playerConfigs.isEmpty()
+                            || msg.playerConfigs.size() > 10) {
+                        player.sendSystemMessage(Component.literal("Configuration d'exploration invalide ou joueur trop éloigné.").withStyle(ChatFormatting.RED));
+                        return;
+                    }
+                    if (MedievalCoinsIntegration.getExplorerXP(player) < 0) {
+                        player.sendSystemMessage(Component.literal("Il faut etre explorateur pour preparer une exploration.").withStyle(ChatFormatting.RED));
+                        return;
+                    }
                     // Mettre à jour le créateur (Joueur 1) comme ACCEPTED automatiquement
                     if (!msg.playerConfigs.isEmpty()) {
                         PacketExplorationAction.PlayerConfig creator = msg.playerConfigs.get(0);
@@ -90,9 +104,35 @@ public class PacketSaveExploration {
                             if (target != null) {
                                 config.playerUUID = target.getUUID();
                                 config.status = PacketExplorationAction.InvitationStatus.PENDING;
-                                sendInvitation(target, player.getName().getString(), msg.pos);
                             } else {
                                 config.status = PacketExplorationAction.InvitationStatus.PENDING;
+                            }
+                        }
+                    }
+
+                    int hallLevel = hall.getHallLevel();
+                    if (!ExplorationProgression.isDurationAllowed(msg.duration, hallLevel, player.getUUID())) {
+                        player.sendSystemMessage(Component.literal("Duree non disponible pour ce niveau de hall ou vos talents.").withStyle(ChatFormatting.RED));
+                        return;
+                    }
+
+                    for (PacketExplorationAction.PlayerConfig config : msg.playerConfigs) {
+                        int maxChests = ExplorationProgression.getMaxChests(hallLevel, config.playerUUID);
+                        if (config.chestCount < 1
+                                || config.chestCount > maxChests
+                                || config.animalCount < 0
+                                || config.animalCount > ExplorationProgression.MAX_ANIMALS_PER_PLAYER) {
+                            player.sendSystemMessage(Component.literal("Configuration invalide pour " + safeName(config.playerName) + " : max " + maxChests + " coffres et " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER + " animaux.").withStyle(ChatFormatting.RED));
+                            return;
+                        }
+                    }
+
+                    for (int i = 1; i < msg.playerConfigs.size(); i++) {
+                        PacketExplorationAction.PlayerConfig config = msg.playerConfigs.get(i);
+                        if (config.playerUUID != null) {
+                            ServerPlayer target = player.server.getPlayerList().getPlayer(config.playerUUID);
+                            if (target != null) {
+                                sendInvitation(target, player.getName().getString(), msg.pos);
                             }
                         }
                     }
@@ -100,9 +140,7 @@ public class PacketSaveExploration {
                     hall.saveExploration(msg.duration, msg.playerConfigs);
                     
                     // Renommer les coffres immédiatement
-                    if (level instanceof ServerLevel serverLevel) {
-                        ExplorationUtils.assignAndRenameChests(serverLevel, msg.pos, msg.playerConfigs);
-                    }
+                    ExplorationUtils.assignAndRenameChests(serverLevel, msg.pos, msg.playerConfigs);
                     
                     // Envoyer la confirmation au client pour mettre à jour le GUI
                     PacketHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new PacketSyncExplorationState(true));
@@ -110,6 +148,10 @@ public class PacketSaveExploration {
             }
         });
         ctx.get().setPacketHandled(true);
+    }
+
+    private static String safeName(String name) {
+        return name == null || name.isBlank() ? "joueur" : name;
     }
     
     private static void sendInvitation(ServerPlayer target, String hostName, BlockPos pos) {
@@ -119,14 +161,14 @@ public class PacketSaveExploration {
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.GREEN)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/exploration accept " + posStr))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/ms exploration accept " + posStr))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Rejoindre l'exploration"))));
         
         Component decline = Component.literal("[REFUSER]")
                 .withStyle(Style.EMPTY
                         .withColor(ChatFormatting.RED)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/exploration decline " + posStr))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/ms exploration decline " + posStr))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Refuser l'invitation"))));
         
         target.sendSystemMessage(Component.literal("--- Invitation Exploration ---").withStyle(ChatFormatting.GOLD));

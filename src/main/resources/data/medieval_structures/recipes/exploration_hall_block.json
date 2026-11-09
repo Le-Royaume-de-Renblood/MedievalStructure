@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "SSS",
+    "BCK",
+    " S "
+  ],
+  "key": {
+    "S": {
+      "tag": "minecraft:wooden_slabs"
+    },
+    "B": {
+      "item": "minecraft:bone"
+    },
+    "C": {
+      "item": "minecraft:campfire"
+    },
+    "K": {
+      "item": "minecraft:book"
+    }
+  },
+  "result": {
+    "item": "medieval_structures:exploration_hall_block",
+    "count": 1
+  },
+  "show_notification": true
+}

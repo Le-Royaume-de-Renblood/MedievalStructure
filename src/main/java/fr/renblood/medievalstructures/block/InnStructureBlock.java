@@ -110,7 +110,7 @@ public class InnStructureBlock extends Block implements EntityBlock {
                 String innName = innBe.getInnName();
                 if (innName == null || innName.isEmpty()) {
                     player.sendSystemMessage(Component.literal("Ce bloc n'est lié à aucune auberge."));
-                    player.sendSystemMessage(Component.literal("Utilisez /auberge link <nom> en regardant le bloc pour le lier."));
+                    player.sendSystemMessage(Component.literal("Utilisez /ms auberge link <nom> en regardant le bloc pour le lier."));
                 } else {
                     InnManager manager = InnManager.get((ServerLevel) level);
                     Inn inn = manager.getInn(innName);

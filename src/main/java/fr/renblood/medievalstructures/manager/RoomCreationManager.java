@@ -37,7 +37,7 @@ public class RoomCreationManager {
         syncToClient(player);
         player.sendSystemMessage(Component.literal("Mode création de chambre activé pour l'auberge '" + innName + "', chambre " + number + "."));
         player.sendSystemMessage(Component.literal("Utilisez le Bâton de l'Aubergiste pour définir la zone (Shift+Clic Gauche / Shift+Clic Droit)."));
-        player.sendSystemMessage(Component.literal("Une fois la zone définie, tapez /auberge room confirm pour valider."));
+        player.sendSystemMessage(Component.literal("Une fois la zone définie, tapez /ms auberge room confirm pour valider."));
     }
 
     public boolean isCreating(ServerPlayer player) {

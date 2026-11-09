@@ -5,6 +5,8 @@ import fr.renblood.medievalstructures.inn.Inn;
 import fr.renblood.medievalstructures.inn.InnManager;
 import fr.renblood.medievalstructures.inn.InnRoom;
 import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
+import fr.renblood.medievalstructures.integration.NpcShopkeeperIntegration;
+import fr.renblood.medievalstructures.manager.InnCustomerManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -59,6 +61,10 @@ public class PacketInnAction {
                     if (msg.action == 0) { // Toggle Active
                         if (inn.getOwnerUUID().equals(player.getUUID())) {
                             inn.setActive(!inn.isActive());
+                            if (!inn.isActive()) {
+                                NpcShopkeeperIntegration.clearInnCustomers(level, inn.getName());
+                                InnCustomerManager.clearSchedule(inn.getName());
+                            }
                             manager.setDirty();
                             updated = true;
                             
@@ -72,36 +78,9 @@ public class PacketInnAction {
                             }
                         }
                     } else if (msg.action == 1) { // Rent Room (Customer)
-                        InnRoom room = inn.getRoom(msg.roomNumber);
-                        if (room != null && !room.isBusy() && !room.isDirty()) {
-                            if (MedievalCoinsIntegration.removeMoney(player, room.getPrice())) {
-                                room.setBusy(true);
-                                room.setOccupantUUID(player.getUUID());
-                                room.setOccupantName(player.getName().getString());
-                                room.setBalance(0);
-                                
-                                inn.addBalance(room.getPrice());
-                                manager.setDirty();
-                                updated = true;
-                                
-                                player.sendSystemMessage(Component.literal("Vous avez loué la chambre " + msg.roomNumber + " pour " + (int)room.getPrice() + " pièces."));
-                            } else {
-                                player.sendSystemMessage(Component.literal("Vous n'avez pas assez d'argent (Prix: " + (int)room.getPrice() + ")."));
-                            }
-                        } else {
-                            player.sendSystemMessage(Component.literal("Cette chambre n'est pas disponible."));
-                        }
-                    } else if (msg.action == 2) { // Collect Money
-                        if (inn.getOwnerUUID().equals(player.getUUID())) {
-                            double amount = inn.getBalance();
-                            if (amount > 0) {
-                                MedievalCoinsIntegration.addMoney(player, amount);
-                                inn.setBalance(0);
-                                manager.setDirty();
-                                updated = true;
-                                player.sendSystemMessage(Component.literal("Vous avez récupéré " + (int)amount + " pièces."));
-                            }
-                        }
+                        fr.renblood.medievalstructures.integration.InnCommerceService.rent(player,inn,manager,msg.roomNumber);
+                    } else if (msg.action == 2) {
+                        fr.renblood.medievalstructures.integration.InnCommerceService.claim(player,inn);
                     } else if (msg.action == 3) { // Add Employee
                         if (inn.getOwnerUUID().equals(player.getUUID())) {
                             ServerPlayer employee = level.getServer().getPlayerList().getPlayerByName(msg.extraData);
@@ -140,23 +119,7 @@ public class PacketInnAction {
                             }
                         }
                     } else if (msg.action == 6) { // Pay Rent (Payer Loyer)
-                        InnRoom room = inn.getRoom(msg.roomNumber);
-                        if (room != null && room.getOccupantUUID() != null && room.getOccupantUUID().equals(player.getUUID())) {
-                            try {
-                                double amountToPay = Double.parseDouble(msg.extraData);
-                                if (MedievalCoinsIntegration.removeMoney(player, amountToPay)) {
-                                    room.addToBalance(amountToPay);
-                                    inn.addBalance(amountToPay);
-                                    manager.setDirty();
-                                    updated = true;
-                                    player.sendSystemMessage(Component.literal("Vous avez payé " + (int)amountToPay + " pièces."));
-                                } else {
-                                    player.sendSystemMessage(Component.literal("Vous n'avez pas assez d'argent."));
-                                }
-                            } catch (NumberFormatException e) {
-                                // Ignorer
-                            }
-                        }
+                        fr.renblood.medievalstructures.integration.InnCommerceService.pay(player,inn,manager,msg.roomNumber,msg.extraData);
                     }
                     
                     // Si une modification a eu lieu, on renvoie les données mises à jour au joueur

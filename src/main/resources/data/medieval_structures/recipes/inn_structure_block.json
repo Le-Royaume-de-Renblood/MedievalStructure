@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "SSS",
+    "BGK",
+    " S "
+  ],
+  "key": {
+    "S": {
+      "tag": "minecraft:wooden_slabs"
+    },
+    "B": {
+      "tag": "minecraft:beds"
+    },
+    "G": {
+      "item": "minecraft:golden_apple"
+    },
+    "K": {
+      "item": "minecraft:book"
+    }
+  },
+  "result": {
+    "item": "medieval_structures:inn_structure_block",
+    "count": 1
+  },
+  "show_notification": true
+}

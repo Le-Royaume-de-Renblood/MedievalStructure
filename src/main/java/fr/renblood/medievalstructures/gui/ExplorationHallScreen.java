@@ -1,131 +1,113 @@
 package fr.renblood.medievalstructures.gui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import fr.renblood.medievalstructures.MedievalStructures;
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
+import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
 import fr.renblood.medievalstructures.network.*;
 import fr.renblood.medievalstructures.util.ExplorationCostCalculator;
+import fr.renblood.medievalstructures.util.ExplorationProgression;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHallMenu> {
-    private static final ResourceLocation TEXTURE = new ResourceLocation(MedievalStructures.MODID, "textures/gui/exploration_hall_gui.png");
+    private static final int PANEL_MIN_WIDTH = 460;
+    private static final int PANEL_MAX_WIDTH = 520;
+    private static final int PANEL_MIN_HEIGHT = 300;
+    private static final int PANEL_MAX_HEIGHT = 360;
+    private static final int TEXT = 0xFFE8E0CC;
+    private static final int MUTED_TEXT = 0xFFBBAF96;
+    private static final int GOLD = 0xFFFFC86B;
+    private static final int GREEN = 0xFF73D17C;
+    private static final int RED = 0xFFFF6B6B;
+    private static final int AMBER = 0xFFFFB14A;
 
     private enum ScreenState {
         MAIN_MENU,
         CREATE_EXPLORATION,
-        VIEW_EXPLORATION
+        VIEW_EXPLORATION,
+        TALENT_TREE
     }
 
     private ScreenState currentState = ScreenState.MAIN_MENU;
-
-    // Données de création
     private int selectedDuration = 20;
-    private List<PacketExplorationAction.PlayerConfig> playerConfigs = new ArrayList<>();
+    private final List<PacketExplorationAction.PlayerConfig> playerConfigs = new ArrayList<>();
     private int currentPlayerIndex = 0;
-    
-    // Widgets Création
-    private CycleButton<Integer> durationButton;
-    private EditBox playerNameBox;
-    private Button addPlayerButton;
-    private Button removePlayerButton;
-    
-    private Button prevPlayerButton;
-    private Button nextPlayerButton;
-    private CycleButton<Integer> chestButton;
-    private CycleButton<Integer> animalButton;
-    private Button saveButton;
-    private Button backButton;
+    private int viewPlayerIndex = 0;
 
-    // Widgets Menu Principal
+    private EditBox playerNameBox;
     private Button newExplorationButton;
     private Button launchButton;
     private Button viewButton;
     private Button cancelButton;
-    
-    // Widgets Visualisation
+    private Button talentsButton;
+    private Button durationMinusButton;
+    private Button durationPlusButton;
+    private Button addPlayerButton;
+    private Button removePlayerButton;
+    private Button prevPlayerButton;
+    private Button nextPlayerButton;
+    private Button chestMinusButton;
+    private Button chestPlusButton;
+    private Button animalMinusButton;
+    private Button animalPlusButton;
+    private Button saveButton;
+    private Button backButton;
     private Button viewBackButton;
+    private Button talentBackButton;
     private Button viewPrevPlayerButton;
     private Button viewNextPlayerButton;
     private Button resendInviteButton;
     private Button removePlayerViewButton;
-    private int viewPlayerIndex = 0;
-    
+
     private long lastInviteTime = 0;
     private long lastHighlightRequest = 0;
-    
     private boolean isDebugMode = false;
 
     public ExplorationHallScreen(ExplorationHallMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
-        this.imageWidth = 226;
-        this.imageHeight = 166;
-        
-        playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 1, Minecraft.getInstance().player.getName().getString()));
-        
-        // Initialiser le debug mode depuis le menu
+        this.imageWidth = 380;
+        this.imageHeight = 246;
+        String playerName = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getName().getString() : "";
+        java.util.UUID playerUuid = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : null;
+        playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 0, playerName, playerUuid, PacketExplorationAction.InvitationStatus.ACCEPTED));
         this.isDebugMode = menu.isDebugMode();
     }
 
     @Override
     protected void init() {
+        this.imageWidth = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, this.width - 40));
+        this.imageHeight = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, this.height - 34));
         super.init();
         initWidgets();
         updateVisibility();
         requestHighlight();
-        requestState(); // Demander l'état (debug)
+        requestState();
     }
-    
-    private void requestHighlight() {
-        if (this.menu.getPos() != null) {
-            PacketHandler.INSTANCE.sendToServer(new PacketRequestChestHighlight(this.menu.getPos()));
-        }
-    }
-    
-    private void requestState() {
-        if (this.menu.getPos() != null) {
-            PacketHandler.INSTANCE.sendToServer(new PacketRequestExplorationState(this.menu.getPos()));
-        }
-    }
-    
+
     @Override
     protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        // On ne dessine pas les titres par défaut (Inventory, etc.)
     }
-    
-    public void updateExplorationState(boolean hasExploration, boolean isDebug) {
-        this.isDebugMode = isDebug;
-        if (this.menu != null) this.menu.setDebugMode(isDebug);
-        
-        if (launchButton != null) launchButton.active = hasExploration;
-        if (viewButton != null) viewButton.active = hasExploration;
-    }
-    
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Si le champ de texte a le focus, on empêche la fermeture avec E
         if (playerNameBox != null && playerNameBox.isFocused()) {
-            if (keyCode == 256) { // Echap
+            if (keyCode == 256) {
                 playerNameBox.setFocused(false);
                 return true;
             }
             if (playerNameBox.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-            // Empêcher la fermeture avec E si on écrit
             if (this.minecraft.options.keyInventory.matches(keyCode, scanCode)) {
                 return true;
             }
@@ -133,233 +115,306 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    public void updateExplorationState(boolean hasExploration, boolean isDebug) {
+        this.isDebugMode = isDebug;
+        if (this.menu != null) this.menu.setDebugMode(isDebug);
+        if (launchButton != null) launchButton.active = hasExploration;
+        if (viewButton != null) viewButton.active = hasExploration;
+        updateLaunchState();
+    }
+
     private void initWidgets() {
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
+        int x = leftPos;
+        int y = topPos;
+        int contentX = x + 18;
+        int contentW = imageWidth - 36;
         int centerX = x + imageWidth / 2;
+        int footerY = y + imageHeight - 34;
+        int actionW = Math.min(202, contentW / 2 - 8);
 
-        // --- MENU PRINCIPAL ---
-        newExplorationButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.new"), b -> {
-            currentState = ScreenState.CREATE_EXPLORATION;
-            updateVisibility();
-        }).bounds(centerX - 78, y + 20, 156, 20).build());
+        newExplorationButton = addRenderableWidget(new StyledButton(contentX, y + 62, actionW, 24,
+                Component.literal("Nouvelle exploration"), b -> switchState(ScreenState.CREATE_EXPLORATION), ButtonStyle.PRIMARY));
+        launchButton = addRenderableWidget(new StyledButton(contentX, y + 92, actionW, 24,
+                Component.translatable("gui.medieval_structures.exploration.launch"), this::onLaunch, ButtonStyle.SUCCESS));
+        viewButton = addRenderableWidget(new StyledButton(contentX, y + 122, actionW, 24,
+                Component.literal("Consulter la preparation"), b -> switchState(ScreenState.VIEW_EXPLORATION), ButtonStyle.SECONDARY));
+        talentsButton = addRenderableWidget(new StyledButton(contentX, y + 152, actionW, 24,
+                Component.literal("Arbre des talents"), b -> switchState(ScreenState.TALENT_TREE), ButtonStyle.PRIMARY));
+        cancelButton = addRenderableWidget(new StyledButton(contentX, y + 182, actionW, 22,
+                Component.literal("Annuler le lancement"), this::onCancel, ButtonStyle.DANGER));
 
-        launchButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.launch"), this::onLaunch)
-                .bounds(centerX - 78, y + 45, 156, 20).build());
+        int rowY = y + 70;
+        durationMinusButton = addRenderableWidget(new StyledButton(contentX, rowY, 28, 22, Component.literal("-"), b -> changeDuration(-1), ButtonStyle.SECONDARY));
+        durationPlusButton = addRenderableWidget(new StyledButton(contentX + 148, rowY, 28, 22, Component.literal("+"), b -> changeDuration(1), ButtonStyle.SECONDARY));
 
-        viewButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.view"), b -> {
-            currentState = ScreenState.VIEW_EXPLORATION;
-            viewPlayerIndex = 0;
-            updateVisibility();
-        }).bounds(centerX - 78, y + 70, 156, 20).build());
-        
-        cancelButton = addRenderableWidget(Button.builder(Component.literal("Annuler Lancement"), this::onCancel)
-                .bounds(centerX - 78, y + 95, 156, 20).build());
-
-        // --- CRÉATION ---
-        List<Integer> durations = Arrays.asList(20, 40, 60, 90, 120, 150);
-        durationButton = addRenderableWidget(CycleButton.builder(this::formatDuration)
-                .withValues(durations)
-                .withInitialValue(selectedDuration)
-                .create(centerX - 78, y + 15, 156, 20, Component.translatable("gui.medieval_structures.exploration.duration"), (cycleButton, value) -> selectedDuration = value));
-
-        // Ajout de joueur
-        playerNameBox = new EditBox(this.font, centerX - 78, y + 40, 100, 20, Component.literal("Pseudo"));
+        playerNameBox = new EditBox(this.font, contentX, y + 123, Math.min(180, contentW / 2 - 36), 22, Component.literal("Pseudo"));
+        playerNameBox.setMaxLength(32);
+        playerNameBox.setBordered(true);
         addRenderableWidget(playerNameBox);
-        
-        addPlayerButton = addRenderableWidget(Button.builder(Component.literal("+"), b -> {
-            String name = playerNameBox.getValue();
-            if (!name.isEmpty()) {
-                boolean exists = playerConfigs.stream().anyMatch(c -> c.playerName.equalsIgnoreCase(name));
-                if (!exists) {
-                    playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 1, name));
-                    playerNameBox.setValue("");
-                    currentPlayerIndex = playerConfigs.size() - 1;
-                    updateCreationWidgets();
-                }
-            }
-        }).bounds(centerX + 25, y + 40, 20, 20).build());
-        
-        removePlayerButton = addRenderableWidget(Button.builder(Component.literal("-"), b -> {
-            if (playerConfigs.size() > 1 && currentPlayerIndex > 0) {
-                playerConfigs.remove(currentPlayerIndex);
-                if (currentPlayerIndex >= playerConfigs.size()) currentPlayerIndex = playerConfigs.size() - 1;
-                updateCreationWidgets();
-            }
-        }).bounds(centerX + 48, y + 40, 20, 20).build());
+        addPlayerButton = addRenderableWidget(new StyledButton(playerNameBox.getX() + playerNameBox.getWidth() + 8, y + 123, 66, 22,
+                Component.literal("Ajouter"), b -> addPlayerFromInput(), ButtonStyle.SUCCESS));
 
+        int configX = centerX + 10;
+        int configW = Math.max(132, x + imageWidth - 18 - configX);
+        prevPlayerButton = addRenderableWidget(new StyledButton(configX, y + 90, 28, 22, Component.literal("<"), b -> selectCreationPlayer(-1), ButtonStyle.SECONDARY));
+        nextPlayerButton = addRenderableWidget(new StyledButton(configX + configW - 28, y + 90, 28, 22, Component.literal(">"), b -> selectCreationPlayer(1), ButtonStyle.SECONDARY));
+        removePlayerButton = addRenderableWidget(new StyledButton(configX, y + 123, configW, 22, Component.literal("Retirer ce joueur"), b -> removeCurrentPlayer(), ButtonStyle.DANGER));
+        chestMinusButton = addRenderableWidget(new StyledButton(configX, y + 172, 28, 22, Component.literal("-"), b -> changeChests(-1), ButtonStyle.SECONDARY));
+        chestPlusButton = addRenderableWidget(new StyledButton(configX + configW - 28, y + 172, 28, 22, Component.literal("+"), b -> changeChests(1), ButtonStyle.SECONDARY));
+        animalMinusButton = addRenderableWidget(new StyledButton(configX, y + 214, 28, 22, Component.literal("-"), b -> changeAnimals(-1), ButtonStyle.SECONDARY));
+        animalPlusButton = addRenderableWidget(new StyledButton(configX + configW - 28, y + 214, 28, 22, Component.literal("+"), b -> changeAnimals(1), ButtonStyle.SECONDARY));
 
-        // Navigation Config
-        prevPlayerButton = addRenderableWidget(Button.builder(Component.literal("<"), b -> {
-            if (currentPlayerIndex > 0) {
-                currentPlayerIndex--;
-                updateCreationWidgets();
-            }
-        }).bounds(centerX - 78, y + 75, 20, 20).build());
+        saveButton = addRenderableWidget(new StyledButton(x + imageWidth - 138, footerY, 120, 24,
+                Component.literal("Enregistrer"), this::onSave, ButtonStyle.SUCCESS));
+        backButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
+                Component.translatable("gui.back"), b -> switchState(ScreenState.MAIN_MENU), ButtonStyle.SECONDARY));
 
-        nextPlayerButton = addRenderableWidget(Button.builder(Component.literal(">"), b -> {
-            if (currentPlayerIndex < playerConfigs.size() - 1) {
-                currentPlayerIndex++;
-                updateCreationWidgets();
-            }
-        }).bounds(centerX + 58, y + 75, 20, 20).build());
+        viewPrevPlayerButton = addRenderableWidget(new StyledButton(contentX, y + 122, 28, 22, Component.literal("<"), b -> selectViewPlayer(-1), ButtonStyle.SECONDARY));
+        viewNextPlayerButton = addRenderableWidget(new StyledButton(x + imageWidth - 46, y + 122, 28, 22, Component.literal(">"), b -> selectViewPlayer(1), ButtonStyle.SECONDARY));
+        resendInviteButton = addRenderableWidget(new StyledButton(x + imageWidth - 158, y + 92, 140, 22, Component.literal("Relancer invitation"), this::onResendInvite, ButtonStyle.PRIMARY));
+        removePlayerViewButton = addRenderableWidget(new StyledButton(x + imageWidth - 158, y + 122, 140, 22, Component.literal("Retirer joueur"), this::onRemovePlayerView, ButtonStyle.DANGER));
+        viewBackButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
+                Component.translatable("gui.back"), b -> switchState(ScreenState.MAIN_MENU), ButtonStyle.SECONDARY));
+        talentBackButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
+                Component.translatable("gui.back"), b -> switchState(ScreenState.MAIN_MENU), ButtonStyle.SECONDARY));
+    }
 
-        List<Integer> chestCounts = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8);
-        chestButton = addRenderableWidget(CycleButton.builder(this::formatChestCount)
-                .withValues(chestCounts)
-                .withInitialValue(1)
-                .create(centerX - 53, y + 75, 106, 20, Component.translatable("gui.medieval_structures.exploration.chests"), (cycleButton, value) -> {
-                    if (!playerConfigs.isEmpty()) playerConfigs.get(currentPlayerIndex).chestCount = value;
-                }));
+    private void requestHighlight() {
+        if (this.menu.getPos() != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketRequestChestHighlight(this.menu.getPos()));
+        }
+    }
 
-        List<Integer> animalCounts = Arrays.asList(1, 2, 3);
-        animalButton = addRenderableWidget(CycleButton.builder(this::formatAnimalCount)
-                .withValues(animalCounts)
-                .withInitialValue(1)
-                .create(centerX - 53, y + 100, 106, 20, Component.translatable("gui.medieval_structures.exploration.animals"), (cycleButton, value) -> {
-                    if (!playerConfigs.isEmpty()) playerConfigs.get(currentPlayerIndex).animalCount = value;
-                }));
+    private void requestState() {
+        if (this.menu.getPos() != null) {
+            PacketHandler.INSTANCE.sendToServer(new PacketRequestExplorationState(this.menu.getPos()));
+        }
+    }
 
-        saveButton = addRenderableWidget(Button.builder(Component.translatable("gui.medieval_structures.exploration.validate"), this::onSave)
-                .bounds(centerX - 78, y + 130, 75, 20).build());
-
-        backButton = addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> {
-            currentState = ScreenState.MAIN_MENU;
-            updateVisibility();
-        }).bounds(centerX + 3, y + 130, 75, 20).build());
-        
-        // --- VISUALISATION ---
-        viewPrevPlayerButton = addRenderableWidget(Button.builder(Component.literal("<"), b -> {
-            if (viewPlayerIndex > 0) viewPlayerIndex--;
-            updateViewWidgets();
-        }).bounds(centerX - 78, y + 75, 20, 20).build());
-
-        viewNextPlayerButton = addRenderableWidget(Button.builder(Component.literal(">"), b -> {
-            ExplorationHallBlockEntity be = getBlockEntity();
-            if (be != null && viewPlayerIndex < be.getSavedConfigs().size() - 1) viewPlayerIndex++;
-            updateViewWidgets();
-        }).bounds(centerX + 58, y + 75, 20, 20).build());
-        
-        resendInviteButton = addRenderableWidget(Button.builder(Component.literal("Relancer"), this::onResendInvite)
-                .bounds(centerX + 80, y + 60, 30, 20).build());
-        
-        removePlayerViewButton = addRenderableWidget(Button.builder(Component.literal("X"), this::onRemovePlayerView)
-                .bounds(centerX + 80, y + 85, 20, 20).build());
-        
-        viewBackButton = addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> {
-            currentState = ScreenState.MAIN_MENU;
-            updateVisibility();
-        }).bounds(centerX - 78, y + 130, 156, 20).build());
+    private void switchState(ScreenState state) {
+        currentState = state;
+        if (state == ScreenState.VIEW_EXPLORATION) viewPlayerIndex = 0;
+        updateVisibility();
     }
 
     private void updateVisibility() {
         boolean main = currentState == ScreenState.MAIN_MENU;
         boolean create = currentState == ScreenState.CREATE_EXPLORATION;
         boolean view = currentState == ScreenState.VIEW_EXPLORATION;
+        boolean talents = currentState == ScreenState.TALENT_TREE;
 
-        if (newExplorationButton != null) newExplorationButton.visible = main;
-        if (launchButton != null) launchButton.visible = main;
-        if (viewButton != null) viewButton.visible = main;
-        if (cancelButton != null) cancelButton.visible = main;
-
-        if (durationButton != null) durationButton.visible = create;
+        setVisible(newExplorationButton, main);
+        setVisible(launchButton, main);
+        setVisible(viewButton, main);
+        setVisible(cancelButton, main);
+        setVisible(talentsButton, main);
+        setVisible(durationMinusButton, create);
+        setVisible(durationPlusButton, create);
         if (playerNameBox != null) playerNameBox.visible = create;
-        if (addPlayerButton != null) addPlayerButton.visible = create;
-        if (removePlayerButton != null) removePlayerButton.visible = create;
-        if (prevPlayerButton != null) prevPlayerButton.visible = create;
-        if (nextPlayerButton != null) nextPlayerButton.visible = create;
-        if (chestButton != null) chestButton.visible = create;
-        if (animalButton != null) animalButton.visible = create;
-        if (saveButton != null) saveButton.visible = create;
-        if (backButton != null) backButton.visible = create;
-        
-        if (viewPrevPlayerButton != null) viewPrevPlayerButton.visible = view;
-        if (viewNextPlayerButton != null) viewNextPlayerButton.visible = view;
-        if (viewBackButton != null) viewBackButton.visible = view;
-        if (resendInviteButton != null) resendInviteButton.visible = view;
-        if (removePlayerViewButton != null) removePlayerViewButton.visible = view;
-        
-        if (main && launchButton != null && viewButton != null) {
-            ExplorationHallBlockEntity be = getBlockEntity();
-            boolean hasExplo = be != null && be.hasExplorationReady();
-            launchButton.active = hasExplo;
-            viewButton.active = hasExplo;
-            
-            if (hasExplo) {
-                boolean allAccepted = be.getSavedConfigs().stream()
-                        .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
-                
-                if (isDebugMode) {
-                    launchButton.active = true;
-                    launchButton.setMessage(Component.literal("Lancer (DEBUG)"));
-                } else {
-                    launchButton.active = allAccepted;
-                    if (!allAccepted) {
-                        launchButton.setMessage(Component.literal("En attente..."));
-                    } else {
-                        launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
-                    }
-                }
-            }
-        }
-        
-        if (create) {
-            updateCreationWidgets();
-        }
-        if (view) {
-            updateViewWidgets();
-        }
+        setVisible(addPlayerButton, create);
+        setVisible(removePlayerButton, create);
+        setVisible(prevPlayerButton, create);
+        setVisible(nextPlayerButton, create);
+        setVisible(chestMinusButton, create);
+        setVisible(chestPlusButton, create);
+        setVisible(animalMinusButton, create);
+        setVisible(animalPlusButton, create);
+        setVisible(saveButton, create);
+        setVisible(backButton, create);
+        setVisible(viewPrevPlayerButton, view);
+        setVisible(viewNextPlayerButton, view);
+        setVisible(resendInviteButton, view);
+        setVisible(removePlayerViewButton, view);
+        setVisible(viewBackButton, view);
+        setVisible(talentBackButton, talents);
+
+        if (create) updateCreationWidgets();
+        if (view) updateViewWidgets();
+        if (main) updateLaunchState();
+    }
+
+    private void setVisible(Button button, boolean visible) {
+        if (button != null) button.visible = visible;
     }
 
     private void updateCreationWidgets() {
         if (playerConfigs.isEmpty()) return;
-        if (chestButton != null) chestButton.setValue(playerConfigs.get(currentPlayerIndex).chestCount);
-        if (animalButton != null) animalButton.setValue(playerConfigs.get(currentPlayerIndex).animalCount);
+        clampSelectedDuration();
+        currentPlayerIndex = Math.max(0, Math.min(currentPlayerIndex, playerConfigs.size() - 1));
         if (removePlayerButton != null) removePlayerButton.active = currentPlayerIndex > 0;
+        if (prevPlayerButton != null) prevPlayerButton.active = currentPlayerIndex > 0;
+        if (nextPlayerButton != null) nextPlayerButton.active = currentPlayerIndex < playerConfigs.size() - 1;
+
+        PacketExplorationAction.PlayerConfig config = playerConfigs.get(currentPlayerIndex);
+        int maxChests = getClientMaxChests();
+        if (config.chestCount > maxChests) config.chestCount = maxChests;
+        if (config.animalCount > ExplorationProgression.MAX_ANIMALS_PER_PLAYER) config.animalCount = ExplorationProgression.MAX_ANIMALS_PER_PLAYER;
+        if (chestMinusButton != null) chestMinusButton.active = config.chestCount > 1;
+        if (chestPlusButton != null) chestPlusButton.active = config.chestCount < maxChests;
+        if (animalMinusButton != null) animalMinusButton.active = config.animalCount > 0;
+        if (animalPlusButton != null) animalPlusButton.active = config.animalCount < ExplorationProgression.MAX_ANIMALS_PER_PLAYER;
     }
-    
+
     private void updateViewWidgets() {
         ExplorationHallBlockEntity be = getBlockEntity();
-        if (be != null && !be.getSavedConfigs().isEmpty()) {
-            if (viewPlayerIndex >= be.getSavedConfigs().size()) viewPlayerIndex = be.getSavedConfigs().size() - 1;
-            PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
-            
-            if (resendInviteButton != null) {
-                resendInviteButton.visible = config.status == PacketExplorationAction.InvitationStatus.PENDING && viewPlayerIndex > 0;
-                resendInviteButton.active = System.currentTimeMillis() - lastInviteTime > 15000;
-            }
-            
-            if (removePlayerViewButton != null) {
-                removePlayerViewButton.visible = viewPlayerIndex > 0;
+        boolean hasConfig = be != null && be.hasExplorationReady() && !be.getSavedConfigs().isEmpty();
+        if (!hasConfig) return;
+
+        viewPlayerIndex = Math.max(0, Math.min(viewPlayerIndex, be.getSavedConfigs().size() - 1));
+        PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
+        if (viewPrevPlayerButton != null) viewPrevPlayerButton.active = viewPlayerIndex > 0;
+        if (viewNextPlayerButton != null) viewNextPlayerButton.active = viewPlayerIndex < be.getSavedConfigs().size() - 1;
+        if (resendInviteButton != null) {
+            resendInviteButton.visible = config.status == PacketExplorationAction.InvitationStatus.PENDING && viewPlayerIndex > 0;
+            resendInviteButton.active = System.currentTimeMillis() - lastInviteTime > 15000;
+        }
+        if (removePlayerViewButton != null) removePlayerViewButton.visible = viewPlayerIndex > 0;
+    }
+
+    private void updateLaunchState() {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        boolean hasExplo = be != null && be.hasExplorationReady();
+        if (viewButton != null) viewButton.active = hasExplo;
+        if (cancelButton != null) cancelButton.active = hasExplo;
+        if (launchButton == null) return;
+
+        launchButton.active = hasExplo;
+        launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
+        if (hasExplo) {
+            boolean allAccepted = be.getSavedConfigs().stream()
+                    .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
+            if (isDebugMode) {
+                launchButton.active = true;
+                launchButton.setMessage(Component.literal("Lancer maintenant (DEBUG)"));
+            } else if (!allAccepted) {
+                launchButton.active = false;
+                launchButton.setMessage(Component.literal("En attente des joueurs"));
             }
         }
     }
 
-    private void initPlayerConfigsData(int count) {
-        while (playerConfigs.size() < count) {
-            playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 1));
+    private void addPlayerFromInput() {
+        String name = playerNameBox.getValue().trim();
+        if (name.isEmpty()) return;
+        boolean exists = playerConfigs.stream().anyMatch(c -> c.playerName != null && c.playerName.equalsIgnoreCase(name));
+        if (!exists) {
+            playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 0, name));
+            playerNameBox.setValue("");
+            currentPlayerIndex = playerConfigs.size() - 1;
+            updateCreationWidgets();
         }
-        while (playerConfigs.size() > count) {
-            playerConfigs.remove(playerConfigs.size() - 1);
-        }
-        if (currentPlayerIndex >= count) currentPlayerIndex = 0;
     }
 
-    private void updatePlayerConfigs(int count) {
-        initPlayerConfigsData(count);
+    private void removeCurrentPlayer() {
+        if (playerConfigs.size() > 1 && currentPlayerIndex > 0) {
+            playerConfigs.remove(currentPlayerIndex);
+            currentPlayerIndex = Math.min(currentPlayerIndex, playerConfigs.size() - 1);
+            updateCreationWidgets();
+        }
+    }
+
+    private void selectCreationPlayer(int delta) {
+        currentPlayerIndex = Math.max(0, Math.min(currentPlayerIndex + delta, playerConfigs.size() - 1));
         updateCreationWidgets();
+    }
+
+    private void selectViewPlayer(int delta) {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        if (be == null || be.getSavedConfigs().isEmpty()) return;
+        viewPlayerIndex = Math.max(0, Math.min(viewPlayerIndex + delta, be.getSavedConfigs().size() - 1));
+        updateViewWidgets();
+    }
+
+    private void changeDuration(int delta) {
+        List<Integer> durations = getClientAvailableDurations();
+        int index = durations.indexOf(selectedDuration);
+        if (index < 0) index = 0;
+        selectedDuration = durations.get(Math.max(0, Math.min(index + delta, durations.size() - 1)));
+        updateCreationWidgets();
+    }
+
+    private void changeChests(int delta) {
+        if (playerConfigs.isEmpty()) return;
+        PacketExplorationAction.PlayerConfig config = playerConfigs.get(currentPlayerIndex);
+        config.chestCount = Math.max(1, Math.min(getClientMaxChests(), config.chestCount + delta));
+        updateCreationWidgets();
+    }
+
+    private void changeAnimals(int delta) {
+        if (playerConfigs.isEmpty()) return;
+        PacketExplorationAction.PlayerConfig config = playerConfigs.get(currentPlayerIndex);
+        config.animalCount = Math.max(0, Math.min(ExplorationProgression.MAX_ANIMALS_PER_PLAYER, config.animalCount + delta));
+        updateCreationWidgets();
+    }
+
+    private void clampSelectedDuration() {
+        List<Integer> durations = getClientAvailableDurations();
+        if (!durations.contains(selectedDuration)) {
+            selectedDuration = durations.get(durations.size() - 1);
+        }
+    }
+
+    private List<Integer> getClientAvailableDurations() {
+        return ExplorationProgression.getAvailableDurations(getClientHallLevel(), Minecraft.getInstance().player);
+    }
+
+    private int getClientMaxChests() {
+        return ExplorationProgression.getMaxChests(getClientHallLevel(), Minecraft.getInstance().player);
+    }
+
+    private int getClientMaxDuration() {
+        List<Integer> durations = getClientAvailableDurations();
+        return durations.get(durations.size() - 1);
+    }
+
+    private int getClientHallLevel() {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        return be != null ? be.getHallLevel() : 1;
+    }
+
+    private int getClientCompletedExplorations() {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        UUID uuid = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : null;
+        return be != null ? be.getCompletedExplorations(uuid) : 0;
+    }
+
+    private String getTalentSummary() {
+        if (Minecraft.getInstance().player == null) return "Talents: cache indisponible";
+        List<Integer> talents = MedievalCoinsIntegration.getUnlockedExplorerTalents(Minecraft.getInstance().player);
+        int slots = Math.max(10, MedievalCoinsIntegration.getExplorerTalentSlots(Minecraft.getInstance().player));
+        if (slots == 0) return "Talents: aucune donnee";
+        if (talents.isEmpty()) return "Talents: 0/" + slots;
+
+        StringBuilder sb = new StringBuilder("Talents: ").append(talents.size()).append("/").append(slots).append("  [");
+        for (int i = 0; i < talents.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(talents.get(i));
+        }
+        return sb.append("]").toString();
+    }
+
+    private String getCurrentStatsLine() {
+        List<Integer> durations = getClientAvailableDurations();
+        int maxDuration = durations.get(durations.size() - 1);
+        return "Stats: " + maxDuration + " min  " + getClientMaxChests() + " coffres/j  " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER + " animaux/j";
+    }
+
+    private boolean hasTalent(int index) {
+        return Minecraft.getInstance().player != null && MedievalCoinsIntegration.hasExplorerTalent(Minecraft.getInstance().player, index);
+    }
+
+    private int getAvailableTalentPoints() {
+        if (Minecraft.getInstance().player == null) return 0;
+        int level = Math.min(10, MedievalCoinsIntegration.getExplorerLevel(Minecraft.getInstance().player));
+        int unlocked = MedievalCoinsIntegration.getUnlockedExplorerTalents(Minecraft.getInstance().player).size();
+        return Math.max(0, level - unlocked);
     }
 
     private void onSave(Button button) {
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
-            PacketHandler.INSTANCE.sendToServer(new PacketSaveExploration(
-                    pos,
-                    selectedDuration,
-                    playerConfigs
-            ));
-            currentState = ScreenState.MAIN_MENU;
-            updateVisibility();
+            PacketHandler.INSTANCE.sendToServer(new PacketSaveExploration(pos, selectedDuration, playerConfigs));
+            switchState(ScreenState.MAIN_MENU);
         }
     }
 
@@ -370,7 +425,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
             this.onClose();
         }
     }
-    
+
     private void onCancel(Button button) {
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
@@ -378,7 +433,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
             this.onClose();
         }
     }
-    
+
     private void onResendInvite(Button button) {
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
@@ -387,7 +442,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
             updateViewWidgets();
         }
     }
-    
+
     private void onRemovePlayerView(Button button) {
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
@@ -396,115 +451,282 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
             updateViewWidgets();
         }
     }
-    
+
     private ExplorationHallBlockEntity getBlockEntity() {
         BlockPos pos = this.menu.getPos();
         if (pos != null && this.minecraft != null && this.minecraft.level != null) {
             BlockEntity be = this.minecraft.level.getBlockEntity(pos);
-            if (be instanceof ExplorationHallBlockEntity) {
-                return (ExplorationHallBlockEntity) be;
-            }
+            if (be instanceof ExplorationHallBlockEntity hall) return hall;
         }
         return null;
     }
 
-    private Component formatDuration(Integer value) { return Component.translatable("gui.medieval_structures.exploration.min", value); }
-    private Component formatPlayerCount(Integer value) { return Component.translatable("gui.medieval_structures.exploration.player_count", value); }
-    private Component formatChestCount(Integer value) { return Component.translatable("gui.medieval_structures.exploration.chest_count", value); }
-    private Component formatAnimalCount(Integer value) { return Component.translatable("gui.medieval_structures.exploration.animal_count", value); }
-
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
-        guiGraphics.blit(TEXTURE, x, y, 0, 0, imageWidth, imageHeight, 226, 166);
+        int x = leftPos;
+        int y = topPos;
+        guiGraphics.fill(x - 2, y - 2, x + imageWidth + 2, y + imageHeight + 2, 0xAA000000);
+        guiGraphics.fillGradient(x, y, x + imageWidth, y + imageHeight, 0xF0211B17, 0xF0101418);
+        guiGraphics.fill(x, y, x + imageWidth, y + 34, 0xFF2D241B);
+        guiGraphics.fill(x, y + 34, x + imageWidth, y + 35, 0xFF6B4D25);
+        guiGraphics.fill(x + 10, y + 42, x + imageWidth - 10, y + imageHeight - 44, 0x552B2B2B);
     }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Rafraîchir la highlight toutes les secondes
         if (System.currentTimeMillis() - lastHighlightRequest > 1000) {
             requestHighlight();
             lastHighlightRequest = System.currentTimeMillis();
         }
-        
+
         renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        renderContent(guiGraphics);
         renderTooltip(guiGraphics, mouseX, mouseY);
-        
-        int x = (width - imageWidth) / 2;
-        int y = (height - imageHeight) / 2;
+    }
+
+    private void renderContent(GuiGraphics guiGraphics) {
+        int x = leftPos;
+        int y = topPos;
+        int contentX = x + 18;
         int centerX = x + imageWidth / 2;
-        
+
+        drawTitle(guiGraphics, "Hall d'exploration");
         if (currentState == ScreenState.MAIN_MENU) {
-            guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.main_menu"), x + 8, y + 6, 0x404040, false);
-            ExplorationHallBlockEntity be = getBlockEntity();
-            if (be != null && be.hasExplorationReady()) {
-                int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
-                String costStr = ExplorationCostCalculator.formatCost(cost);
-                guiGraphics.drawString(this.font, "Coût: " + costStr, x + 10, y + 120, 0x404040, false);
-                
-                boolean allAccepted = be.getSavedConfigs().stream()
-                        .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
-                if (launchButton != null) {
-                    if (isDebugMode) {
-                        launchButton.active = true;
-                        launchButton.setMessage(Component.literal("Lancer (DEBUG)"));
-                    } else {
-                        launchButton.active = allAccepted;
-                        if (!allAccepted) {
-                            launchButton.setMessage(Component.literal("En attente..."));
-                        } else {
-                            launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
-                        }
-                    }
-                }
-            }
+            renderMain(guiGraphics, contentX, y);
         } else if (currentState == ScreenState.CREATE_EXPLORATION) {
-            guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.create"), x + 8, y + 6, 0x404040, false);
-            
-            String playerName = playerConfigs.get(currentPlayerIndex).playerName;
-            Component label = Component.literal("Config: " + playerName);
-            int textWidth = this.font.width(label);
-            guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, 0x404040, false);
-            
-            int cost = ExplorationCostCalculator.calculateTotalCost(selectedDuration, playerConfigs);
-            String costStr = ExplorationCostCalculator.formatCost(cost);
-            guiGraphics.drawString(this.font, "Coût: " + costStr, x + 10, y + 150, 0x404040, false);
-            
+            renderCreation(guiGraphics, contentX, centerX, y);
         } else if (currentState == ScreenState.VIEW_EXPLORATION) {
-            guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.view_title"), x + 8, y + 6, 0x404040, false);
-            ExplorationHallBlockEntity be = getBlockEntity();
-            if (be != null && be.hasExplorationReady()) {
-                guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.duration_val", be.getSavedDuration()), x + 10, y + 30, 0x404040, false);
-                guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.players_val", be.getSavedConfigs().size()), x + 10, y + 45, 0x404040, false);
-                
-                if (!be.getSavedConfigs().isEmpty()) {
-                    if (viewPlayerIndex >= be.getSavedConfigs().size()) viewPlayerIndex = 0;
-                    PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
-                    
-                    String name = config.playerName;
-                    int color = 0x404040;
-                    String statusText = "";
-                    switch (config.status) {
-                        case ACCEPTED: color = 0x00AA00; statusText = " (Accepté)"; break;
-                        case DECLINED: color = 0xAA0000; statusText = " (Refusé)"; break;
-                        case PENDING: color = 0xFFAA00; statusText = " (En attente)"; break;
-                    }
-                    
-                    Component label = Component.literal(name + statusText);
-                    int textWidth = this.font.width(label);
-                    guiGraphics.drawString(this.font, label, centerX - textWidth / 2, y + 65, color, false);
-                    
-                    guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.chests_val", config.chestCount), centerX - 53, y + 80, 0x404040, false);
-                    guiGraphics.drawString(this.font, Component.translatable("gui.medieval_structures.exploration.animals_val", config.animalCount), centerX - 53, y + 105, 0x404040, false);
+            renderView(guiGraphics, contentX, centerX, y);
+        } else {
+            renderTalentTree(guiGraphics, contentX, y);
+        }
+    }
+
+    private void drawTitle(GuiGraphics guiGraphics, String text) {
+        guiGraphics.drawString(this.font, text, leftPos + 18, topPos + 13, GOLD, false);
+    }
+
+    private void renderMain(GuiGraphics guiGraphics, int contentX, int y) {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        boolean hasExplo = be != null && be.hasExplorationReady();
+        int hallLevel = be != null ? be.getHallLevel() : 1;
+        int completed = be != null ? be.getCompletedExplorations() : 0;
+        int infoX = contentX + Math.min(220, (imageWidth - 36) / 2);
+        guiGraphics.drawString(this.font, hasExplo ? "Une exploration est prete." : "Prepare un depart depuis ce hall.", contentX, y + 39, TEXT, false);
+        guiGraphics.drawString(this.font, "Progression du hall", infoX, y + 62, GOLD, false);
+        guiGraphics.drawString(this.font, "Niveau: " + hallLevel, infoX, y + 82, TEXT, false);
+        guiGraphics.drawString(this.font, "Total hall: " + completed, infoX, y + 96, MUTED_TEXT, false);
+        guiGraphics.drawString(this.font, "Vous: " + getClientCompletedExplorations(), infoX, y + 110, MUTED_TEXT, false);
+        guiGraphics.drawString(this.font, "Stats actuelles", infoX, y + 136, GOLD, false);
+        guiGraphics.drawString(this.font, "Temps max: " + getClientMaxDuration() + " min", infoX, y + 156, TEXT, false);
+        guiGraphics.drawString(this.font, "Coffres max: " + getClientMaxChests() + " / joueur", infoX, y + 170, TEXT, false);
+        guiGraphics.drawString(this.font, "Animaux max: " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER + " / joueur", infoX, y + 184, TEXT, false);
+        if (hasExplo) {
+            int totalChests = be.getSavedConfigs().stream().mapToInt(c -> c.chestCount).sum();
+            int totalAnimals = be.getSavedConfigs().stream().mapToInt(c -> c.animalCount).sum();
+            int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
+            guiGraphics.drawString(this.font, "Preparation", infoX, y + 210, GOLD, false);
+            guiGraphics.drawString(this.font, be.getSavedDuration() + " min  J:" + be.getSavedConfigs().size() + "  C:" + totalChests + "  A:" + totalAnimals, infoX, y + 230, MUTED_TEXT, false);
+            guiGraphics.drawString(this.font, "Cout: " + ExplorationCostCalculator.formatCost(cost), infoX, y + 244, GOLD, false);
+        } else {
+            guiGraphics.drawString(this.font, "Aucune configuration sauvegardee.", infoX, y + 210, MUTED_TEXT, false);
+        }
+    }
+
+    private void renderCreation(GuiGraphics guiGraphics, int contentX, int centerX, int y) {
+        PacketExplorationAction.PlayerConfig config = playerConfigs.get(currentPlayerIndex);
+        int configX = centerX + 10;
+        int configW = Math.max(132, leftPos + imageWidth - 18 - configX);
+        int configCenter = configX + configW / 2;
+
+        guiGraphics.drawString(this.font, "Creation rapide", contentX, y + 40, TEXT, false);
+        guiGraphics.drawString(this.font, "Duree (max " + getClientAvailableDurations().get(getClientAvailableDurations().size() - 1) + ")", contentX, y + 54, MUTED_TEXT, false);
+        drawCentered(guiGraphics, selectedDuration + " min", contentX + 88, y + 65, GOLD);
+        guiGraphics.drawString(this.font, "Ajouter un joueur", contentX, y + 109, MUTED_TEXT, false);
+        guiGraphics.drawString(this.font, "Participants: " + playerConfigs.size(), contentX, y + 158, TEXT, false);
+        for (int i = 0; i < Math.min(playerConfigs.size(), 3); i++) {
+            int color = i == currentPlayerIndex ? GOLD : MUTED_TEXT;
+            guiGraphics.drawString(this.font, (i + 1) + ". " + playerConfigs.get(i).playerName, contentX, y + 176 + i * 12, color, false);
+        }
+
+        guiGraphics.drawString(this.font, "Configuration joueur", configX, y + 40, TEXT, false);
+        drawCentered(guiGraphics, config.playerName == null || config.playerName.isEmpty() ? "Joueur" : config.playerName, configCenter, y + 96, GOLD);
+        guiGraphics.drawString(this.font, "Coffres (max " + getClientMaxChests() + ")", configX, y + 158, MUTED_TEXT, false);
+        drawCentered(guiGraphics, String.valueOf(config.chestCount), configCenter, y + 178, TEXT);
+        guiGraphics.drawString(this.font, "Animaux (max " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER + ")", configX, y + 200, MUTED_TEXT, false);
+        drawCentered(guiGraphics, String.valueOf(config.animalCount), configCenter, y + 220, TEXT);
+
+        int cost = ExplorationCostCalculator.calculateTotalCost(selectedDuration, playerConfigs);
+        guiGraphics.drawString(this.font, "Cout total: " + ExplorationCostCalculator.formatCost(cost), contentX + 96, y + imageHeight - 26, GOLD, false);
+    }
+
+    private void renderView(GuiGraphics guiGraphics, int contentX, int centerX, int y) {
+        ExplorationHallBlockEntity be = getBlockEntity();
+        if (be == null || !be.hasExplorationReady()) {
+            guiGraphics.drawString(this.font, "Aucune exploration sauvegardee.", contentX, y + 54, MUTED_TEXT, false);
+            return;
+        }
+
+        int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
+        guiGraphics.drawString(this.font, "Duree: " + be.getSavedDuration() + " min", contentX, y + 48, TEXT, false);
+        guiGraphics.drawString(this.font, "Total: " + ExplorationCostCalculator.formatCost(cost), contentX, y + 64, GOLD, false);
+        guiGraphics.drawString(this.font, "Participants", contentX, y + 88, MUTED_TEXT, false);
+
+        for (int i = 0; i < Math.min(be.getSavedConfigs().size(), 6); i++) {
+            PacketExplorationAction.PlayerConfig row = be.getSavedConfigs().get(i);
+            int color = i == viewPlayerIndex ? GOLD : statusColor(row.status);
+            guiGraphics.drawString(this.font, (i + 1) + ". " + row.playerName + " - " + statusText(row.status), contentX, y + 105 + i * 13, color, false);
+        }
+
+        PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
+        int playerCost = ExplorationCostCalculator.calculatePlayerCost(be.getSavedDuration(), be.getSavedConfigs().size(), config);
+        drawCentered(guiGraphics, config.playerName, centerX + 68, y + 151, GOLD);
+        guiGraphics.drawString(this.font, "Coffres: " + config.chestCount, centerX + 16, y + 170, TEXT, false);
+        guiGraphics.drawString(this.font, "Attaches: " + config.animalCount, centerX + 16, y + 184, TEXT, false);
+        guiGraphics.drawString(this.font, "Prix joueur: " + ExplorationCostCalculator.formatCost(playerCost), centerX + 16, y + 198, GOLD, false);
+    }
+
+    private void renderTalentTree(GuiGraphics guiGraphics, int contentX, int y) {
+        guiGraphics.drawString(this.font, "Arbre des talents - Explorateur", contentX, y + 42, TEXT, false);
+        guiGraphics.drawString(this.font, "Points disponibles : " + getAvailableTalentPoints(), leftPos + imageWidth / 2 - 48, y + 58, GREEN, false);
+
+        int treeTop = y + 88;
+        int columnGap = Math.max(118, (imageWidth - 120) / 3);
+        int firstX = leftPos + imageWidth / 2 - columnGap;
+        int[] xs = {firstX, firstX + columnGap, firstX + columnGap * 2};
+        TalentNode[][] columns = {
+                {
+                        new TalentNode(0, "Temps", "d'exploration", "+ 40"),
+                        new TalentNode(1, "Temps", "d'exploration", "+ 60"),
+                        new TalentNode(2, "Place", "d'inventaire", "+ 1")
+                },
+                {
+                        new TalentNode(3, "Capacite de", "stockage", "+1 -10%"),
+                        new TalentNode(4, "Capacite de", "stockage", "+1 -15%"),
+                        new TalentNode(5, "Place", "d'inventaire", "+ 1")
+                },
+                {
+                        new TalentNode(6, "Lit", "d'exploration", ""),
+                        new TalentNode(7, "Magnetite", "d'exploration", ""),
+                        new TalentNode(8, "Place", "d'inventaire", "+ 1")
                 }
-                
-                int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
-                String costStr = ExplorationCostCalculator.formatCost(cost);
-                guiGraphics.drawString(this.font, "Total: " + costStr, x + 10, y + 130, 0x404040, false);
+        };
+
+        for (int c = 0; c < columns.length; c++) {
+            for (int row = 0; row < columns[c].length; row++) {
+                int cy = treeTop + row * 64;
+                drawTalentCircle(guiGraphics, xs[c], cy, columns[c][row]);
+                if (row < columns[c].length - 1) {
+                    drawDownArrow(guiGraphics, xs[c], cy + 32, hasTalent(columns[c][row].index()) && hasTalent(columns[c][row + 1].index()));
+                }
             }
+        }
+
+        int masteryY = y + imageHeight - 66;
+        drawMastery(guiGraphics, leftPos + imageWidth / 2, masteryY, hasTalent(9));
+    }
+
+    private void drawTalentCircle(GuiGraphics guiGraphics, int centerX, int centerY, TalentNode node) {
+        boolean unlocked = hasTalent(node.index());
+        int bg = unlocked ? 0xFF12A94F : 0xFF46505F;
+        int shade = unlocked ? 0xFF0D7D3B : 0xFF303948;
+        int textColor = 0xFFFFFFFF;
+        drawFilledCircle(guiGraphics, centerX, centerY, 30, 0x88000000);
+        drawFilledCircle(guiGraphics, centerX, centerY, 28, bg);
+        guiGraphics.fill(centerX - 20, centerY + 19, centerX + 21, centerY + 23, shade);
+        drawCentered(guiGraphics, node.line1(), centerX, centerY - 14, textColor);
+        drawCentered(guiGraphics, node.line2(), centerX, centerY - 3, textColor);
+        if (!node.line3().isEmpty()) {
+            drawCentered(guiGraphics, node.line3(), centerX, centerY + 8, textColor);
+        }
+    }
+
+    private void drawFilledCircle(GuiGraphics guiGraphics, int centerX, int centerY, int radius, int color) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            int halfWidth = (int) Math.sqrt(radius * radius - dy * dy);
+            guiGraphics.fill(centerX - halfWidth, centerY + dy, centerX + halfWidth + 1, centerY + dy + 1, color);
+        }
+    }
+
+    private void drawDownArrow(GuiGraphics guiGraphics, int centerX, int y, boolean unlocked) {
+        int color = unlocked ? GREEN : 0xFF9AA2AE;
+        guiGraphics.fill(centerX - 1, y, centerX + 1, y + 12, color);
+        guiGraphics.fill(centerX - 5, y + 9, centerX - 3, y + 11, color);
+        guiGraphics.fill(centerX + 3, y + 9, centerX + 5, y + 11, color);
+        guiGraphics.fill(centerX - 3, y + 11, centerX + 3, y + 13, color);
+    }
+
+    private void drawMastery(GuiGraphics guiGraphics, int centerX, int centerY, boolean unlocked) {
+        int bg = unlocked ? 0xFF12A94F : 0xFF46505F;
+        int border = unlocked ? GREEN : 0xFF6B7585;
+        int width = Math.min(260, imageWidth - 140);
+        guiGraphics.fill(centerX - width / 2 - 2, centerY - 18, centerX + width / 2 + 2, centerY + 18, 0x88000000);
+        guiGraphics.fill(centerX - width / 2, centerY - 16, centerX + width / 2, centerY + 16, bg);
+        guiGraphics.fill(centerX - width / 2, centerY - 16, centerX + width / 2, centerY - 14, border);
+        guiGraphics.fill(centerX - width / 2, centerY + 14, centerX + width / 2, centerY + 16, 0xFF202734);
+        drawCentered(guiGraphics, "Maitre de guilde des explorateurs", centerX, centerY - 4, 0xFFFFFFFF);
+    }
+
+    private record TalentNode(int index, String line1, String line2, String line3) {}
+
+    private void drawCentered(GuiGraphics guiGraphics, String text, int x, int y, int color) {
+        guiGraphics.drawString(this.font, text, x - this.font.width(text) / 2, y, color, false);
+    }
+
+    private int statusColor(PacketExplorationAction.InvitationStatus status) {
+        return switch (status) {
+            case ACCEPTED -> GREEN;
+            case DECLINED -> RED;
+            case PENDING -> AMBER;
+        };
+    }
+
+    private String statusText(PacketExplorationAction.InvitationStatus status) {
+        return switch (status) {
+            case ACCEPTED -> "accepte";
+            case DECLINED -> "refuse";
+            case PENDING -> "attente";
+        };
+    }
+
+    private enum ButtonStyle {
+        PRIMARY(0xFF7B4E22, 0xFFC98536),
+        SECONDARY(0xFF343434, 0xFF7B6B55),
+        SUCCESS(0xFF2E6237, 0xFF74AA61),
+        DANGER(0xFF6D2929, 0xFFB24A3E);
+
+        private final int base;
+        private final int border;
+
+        ButtonStyle(int base, int border) {
+            this.base = base;
+            this.border = border;
+        }
+    }
+
+    private class StyledButton extends Button {
+        private final ButtonStyle style;
+
+        StyledButton(int x, int y, int width, int height, Component message, OnPress onPress, ButtonStyle style) {
+            super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+            this.style = style;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+            int x = getX();
+            int y = getY();
+            int bg = this.active ? style.base : 0xFF242424;
+            int border = this.isHoveredOrFocused() && this.active ? GOLD : style.border;
+            guiGraphics.fill(x, y, x + this.width, y + this.height, 0xBB000000);
+            guiGraphics.fill(x + 1, y + 1, x + this.width - 1, y + this.height - 1, bg);
+            guiGraphics.fill(x, y, x + this.width, y + 1, border);
+            guiGraphics.fill(x, y + this.height - 1, x + this.width, y + this.height, 0xFF17120E);
+            guiGraphics.fill(x, y, x + 1, y + this.height, border);
+            guiGraphics.fill(x + this.width - 1, y, x + this.width, y + this.height, 0xFF17120E);
+            int color = this.active ? 0xFFFFFFFF : 0xFF8E8E8E;
+            drawCentered(guiGraphics, this.getMessage().getString(), x + this.width / 2, y + (this.height - 8) / 2, color);
         }
     }
 }

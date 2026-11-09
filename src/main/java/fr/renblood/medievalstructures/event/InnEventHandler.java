@@ -129,7 +129,13 @@ public class InnEventHandler {
                         // Si c'est un PNJ
                         if (!room.isDirty()) {
                             double gain = room.getPrice() * penaltyFactor;
-                            inn.addBalance(gain);
+                            long iron=(long)Math.floor(gain);
+                            if(iron>0&&inn.getOwnerUUID()!=null){
+                                String period="lodging:"+inn.getEconomyId()+":"+(level.getDayTime()/24000)+":"+room.getNumber();
+                                fr.renblood.medievalstructures.integration.CommerceAdapter.passive(level.getServer(),inn.getOwnerUUID().toString(),period,
+                                    fr.renblood.medievalstructures.integration.InnCommerceService.business(inn),inn.getName(),iron)
+                                    .exceptionally(failure->{org.slf4j.LoggerFactory.getLogger("RenbloodEconomy").warn("Budget voyageur indisponible pour {}",period);return null;});
+                            }
 
                             UUID ownerUUID = inn.getOwnerUUID();
                             if (ownerUUID != null) {
@@ -303,7 +309,7 @@ public class InnEventHandler {
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
         if (event.getLevel().isClientSide() || !(event.getLevel() instanceof ServerLevel level)) return;
-        if (event.getPlayer().isCreative()) return;
+        if (canBypassInnLocks(event.getPlayer())) return;
 
         BlockPos pos = event.getPos();
         InnManager manager = InnManager.get(level);
@@ -380,9 +386,15 @@ public class InnEventHandler {
                     boolean isOwner = inn.getOwnerUUID() != null && inn.getOwnerUUID().equals(player.getUUID());
                     boolean isEmployee = inn.isEmployee(player.getUUID());
                     
-                    if (!isOwner && !isEmployee && !player.isCreative()) {
+                    if (!isOwner && !isEmployee && !canBypassInnLocks(player)) {
                         event.setCanceled(true);
                         player.displayClientMessage(Component.literal("Seul le propriétaire ou un employé peut interagir avec cet accessoire."), true);
+                        return;
+                    }
+
+                    if ((prop.getType().equals("chest") || prop.getType().equals("furnace")) && prop.isActive() && !canBypassInnLocks(player)) {
+                        event.setCanceled(true);
+                        player.displayClientMessage(Component.literal("Cet accessoire est propre et ne peut pas servir de stockage ou d'atelier."), true);
                         return;
                     }
 
@@ -464,7 +476,7 @@ public class InnEventHandler {
                             boolean isOwner = inn.getOwnerUUID() != null && inn.getOwnerUUID().equals(player.getUUID());
                             boolean isEmployee = inn.isEmployee(player.getUUID());
 
-                            if (!isOccupant && !isOwner && !isEmployee && !player.isCreative()) {
+                            if (!isOccupant && !isOwner && !isEmployee && !canBypassInnLocks(player)) {
                                 event.setCanceled(true);
                                 player.displayClientMessage(Component.literal("Cette chambre est louée, vous ne pouvez pas ouvrir ceci."), true);
                                 return;
@@ -546,5 +558,9 @@ public class InnEventHandler {
 
     private static boolean isSameBedLocation(BlockPos pos1, BlockPos pos2) {
         return pos1.distSqr(pos2) <= 2.5;
+    }
+
+    private static boolean canBypassInnLocks(Player player) {
+        return player.isCreative() || (player instanceof ServerPlayer serverPlayer && serverPlayer.hasPermissions(2));
     }
 }

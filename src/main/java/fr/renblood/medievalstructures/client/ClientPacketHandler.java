@@ -2,8 +2,13 @@ package fr.renblood.medievalstructures.client;
 
 import fr.renblood.medievalstructures.event.ClientModEvents;
 import fr.renblood.medievalstructures.gui.InnCustomerScreen;
+import fr.renblood.medievalstructures.gui.InnFoodMenuScreen;
+import fr.renblood.medievalstructures.gui.InnReferenceCatalogScreen;
 import fr.renblood.medievalstructures.gui.InnOwnerScreen;
+import fr.renblood.medievalstructures.gui.InnReferenceCreationScreen;
+import fr.renblood.medievalstructures.gui.InnRouteSelectionScreen;
 import fr.renblood.medievalstructures.inn.Inn;
+import fr.renblood.medievalstructures.inn.InnReferenceItem;
 import fr.renblood.medievalstructures.manager.DefinitionModeManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -37,11 +42,38 @@ public class ClientPacketHandler {
             screen.updateInnData(inn);
         } else if (mc.screen instanceof InnCustomerScreen screen) {
             screen.updateInnData(inn);
+        } else if (mc.screen instanceof InnFoodMenuScreen screen) {
+            screen.updateInnData(inn);
+        } else if (mc.screen instanceof InnReferenceCatalogScreen screen) {
+            screen.updateInnData(inn);
         }
     }
 
     public static void handleHighlightRoom(List<BlockPos> propPositions) {
         ClientModEvents.setHighlightedProps(propPositions, 200); // 10 secondes
+    }
+
+    public static void handleSyncInnReferences(List<InnReferenceItem> references) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.screen instanceof InnReferenceCatalogScreen screen) {
+            screen.updateReferences(references);
+        }
+    }
+
+    public static void openAdminTradeCatalog() {
+        Minecraft.getInstance().setScreen(new InnReferenceCatalogScreen());
+    }
+
+    public static void handleReferenceSuggestion(String itemId, int min, int max, boolean created) {
+        if (Minecraft.getInstance().screen instanceof InnReferenceCreationScreen screen) {
+            screen.applySuggestion(itemId, min, max, created);
+        }
+    }
+
+    public static void handleSyncInnRoutes(String innName, List<String> routes) {
+        if (Minecraft.getInstance().screen instanceof InnRouteSelectionScreen screen) {
+            screen.updateRoutes(innName, routes);
+        }
     }
 
     public static void handleSyncRoomSelection(BlockPos point1, BlockPos point2) {

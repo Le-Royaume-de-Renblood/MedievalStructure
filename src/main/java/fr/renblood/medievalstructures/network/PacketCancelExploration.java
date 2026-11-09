@@ -36,17 +36,17 @@ public class PacketCancelExploration {
                 BlockEntity be = serverLevel.getBlockEntity(msg.pos);
                 if (be instanceof ExplorationHallBlockEntity hall) {
                     
-                    // Tenter d'annuler via le manager
-                    int refundAmount = ExplorationManager.get(serverLevel).cancelCountdown(msg.pos);
-                    
-                    if (refundAmount >= 0) {
-                        // Rembourser le joueur
-                        MedievalCoinsIntegration.addMoney(player, refundAmount);
-                        
-                        player.sendSystemMessage(Component.literal("Exploration annulée. Vous avez été remboursé de " + ExplorationCostCalculator.formatCost(refundAmount)).withStyle(net.minecraft.ChatFormatting.GREEN));
-                    } else {
-                        player.sendSystemMessage(Component.literal("Impossible d'annuler (trop tard ou pas lancée).").withStyle(net.minecraft.ChatFormatting.RED));
+                    ExplorationManager manager=ExplorationManager.get(serverLevel);
+                    ExplorationManager.PendingExploration pending=manager.pendingPayment(msg.pos,player.getUUID());
+                    if(pending==null||pending.paymentKey.isBlank()||!player.blockPosition().closerThan(msg.pos,8.0D)){
+                        player.sendSystemMessage(Component.literal("Seul le payeur peut annuler son départ en préparation."));return;
                     }
+                    fr.renblood.medievalstructures.integration.CommerceAdapter.refund(player,"refund:"+pending.paymentKey,"explorations",pending.paymentKey,()->{
+                        if(manager.pendingPayment(msg.pos,player.getUUID())!=pending)return false;
+                        return manager.cancelCountdown(serverLevel,msg.pos)>=0;
+                    },()->manager.persist(serverLevel)).whenComplete((receipt,failure)->player.getServer().execute(()->{
+                        player.sendSystemMessage(Component.literal(failure==null?"Annulation traitée. Consultez le reçu bancaire.":"Remboursement non terminé : vérifiez vos finances."));
+                    }));
                 }
             }
         });

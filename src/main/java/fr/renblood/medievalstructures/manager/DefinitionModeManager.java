@@ -83,7 +83,7 @@ public class DefinitionModeManager {
             if (be instanceof InnStructureBlockEntity innBe) {
                 innBe.setVolume(pos1, pos2);
                 player.sendSystemMessage(Component.literal("Zone validée !"));
-                player.sendSystemMessage(Component.literal("Maintenant, liez ce bloc à une auberge avec /auberge link <nom> en regardant le bloc."));
+                player.sendSystemMessage(Component.literal("Maintenant, liez ce bloc à une auberge avec /ms auberge link <nom> en regardant le bloc."));
             } else {
                 player.sendSystemMessage(Component.literal("Erreur: Impossible de trouver le bloc de structure."));
             }

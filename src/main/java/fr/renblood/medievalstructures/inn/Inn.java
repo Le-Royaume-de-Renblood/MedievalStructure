@@ -14,6 +14,8 @@ import java.util.UUID;
 
 public class Inn {
     private String name;
+    private UUID economyId=UUID.randomUUID();
+    public UUID getEconomyId(){return economyId;}
     private UUID ownerUUID;
     private String ownerName = ""; // Cache du nom du propriétaire
     private List<UUID> employees;
@@ -26,6 +28,15 @@ public class Inn {
     private double balance; // Solde de l'auberge
     private List<InnRoom> rooms;
     private List<InnProp> props;
+    private List<InnMenuEntry> menuEntries;
+    private String customerRouteId = "";
+    private int customerRouteMinSeconds = 180;
+    private int customerRouteMaxSeconds = 420;
+    private int totalMenuSales;
+    private long totalMenuRevenue;
+    private String lastMenuSaleItem = "";
+    private long lastMenuSalePrice;
+    private List<InnMenuSale> recentMenuSales;
 
     public Inn(String name, UUID ownerUUID, int maxRooms, int propsPerRoom) {
         this.name = name;
@@ -35,6 +46,8 @@ public class Inn {
         this.propsPerRoom = propsPerRoom;
         this.rooms = new ArrayList<>();
         this.props = new ArrayList<>();
+        this.menuEntries = new ArrayList<>();
+        this.recentMenuSales = new ArrayList<>();
         this.isSpawned = false;
         this.isActive = false;
         this.balance = 0;
@@ -97,6 +110,14 @@ public class Inn {
         return isSpawned;
     }
 
+    public int getMaxRooms() {
+        return maxRooms;
+    }
+
+    public int getPropsPerRoom() {
+        return propsPerRoom;
+    }
+
     public void setActive(boolean active) {
         this.isActive = active;
     }
@@ -145,9 +166,97 @@ public class Inn {
         return props;
     }
 
+    public List<InnMenuEntry> getMenuEntries() {
+        return menuEntries;
+    }
+
+    public InnMenuEntry getMenuEntry(String itemId) {
+        if (itemId == null) return null;
+        return menuEntries.stream().filter(entry -> entry.getItemId().equals(itemId)).findFirst().orElse(null);
+    }
+
+    public boolean addMenuEntry(InnMenuEntry entry) {
+        if (entry == null || getMenuEntry(entry.getItemId()) != null) return false;
+        menuEntries.add(entry);
+        return true;
+    }
+
+    public boolean removeMenuEntry(String itemId) {
+        return menuEntries.removeIf(entry -> entry.getItemId().equals(itemId));
+    }
+
+    public String getCustomerRouteId() {
+        return customerRouteId;
+    }
+
+    public void setCustomerRouteId(String customerRouteId) {
+        this.customerRouteId = customerRouteId == null ? "" : customerRouteId;
+    }
+
+    public int getCustomerRouteMinSeconds() {
+        return customerRouteMinSeconds;
+    }
+
+    public int getCustomerRouteMaxSeconds() {
+        return customerRouteMaxSeconds;
+    }
+
+    public void setCustomerRouteTiming(int minSeconds, int maxSeconds) {
+        this.customerRouteMinSeconds = Math.max(10, minSeconds);
+        this.customerRouteMaxSeconds = Math.max(this.customerRouteMinSeconds, maxSeconds);
+    }
+
+    public boolean hasCustomerRoute() {
+        return customerRouteId != null && !customerRouteId.isBlank();
+    }
+
+    public boolean canReceiveCustomers() {
+        return isActive && hasCustomerRoute()
+                && countMenuType(InnMenuEntry.Type.DISH) >= 4
+                && countMenuType(InnMenuEntry.Type.DRINK) >= 2
+                && countMenuType(InnMenuEntry.Type.STARTER) >= 2;
+    }
+
+    public long countMenuType(InnMenuEntry.Type type) {
+        return menuEntries.stream().filter(entry -> entry.getType() == type).count();
+    }
+
+    public void recordMenuSale(InnMenuEntry entry, long price, String sellerName, long soldAt) {
+        if (entry == null) return;
+        totalMenuSales++;
+        totalMenuRevenue += Math.max(0L, price);
+        lastMenuSaleItem = entry.getDisplayName();
+        lastMenuSalePrice = Math.max(0L, price);
+        recentMenuSales.add(0, new InnMenuSale(entry.getDisplayName(), sellerName == null ? "" : sellerName, Math.max(0L, price), soldAt));
+        while (recentMenuSales.size() > 12) {
+            recentMenuSales.remove(recentMenuSales.size() - 1);
+        }
+    }
+
+    public int getTotalMenuSales() {
+        return totalMenuSales;
+    }
+
+    public long getTotalMenuRevenue() {
+        return totalMenuRevenue;
+    }
+
+    public String getLastMenuSaleItem() {
+        return lastMenuSaleItem;
+    }
+
+    public long getLastMenuSalePrice() {
+        return lastMenuSalePrice;
+    }
+
+    public List<InnMenuSale> getRecentMenuSales() {
+        return recentMenuSales;
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("Name", name);
+        tag.putUUID("EconomyId",economyId);
         if (ownerUUID != null) tag.putUUID("Owner", ownerUUID);
         tag.putString("OwnerName", ownerName);
         
@@ -182,6 +291,25 @@ public class Inn {
         }
         tag.put("Props", propsTag);
 
+        ListTag menuTag = new ListTag();
+        for (InnMenuEntry entry : menuEntries) {
+            menuTag.add(entry.save());
+        }
+        tag.put("MenuEntries", menuTag);
+        tag.putString("CustomerRouteId", customerRouteId);
+        tag.putInt("CustomerRouteMinSeconds", customerRouteMinSeconds);
+        tag.putInt("CustomerRouteMaxSeconds", customerRouteMaxSeconds);
+        tag.putInt("TotalMenuSales", totalMenuSales);
+        tag.putLong("TotalMenuRevenue", totalMenuRevenue);
+        tag.putString("LastMenuSaleItem", lastMenuSaleItem);
+        tag.putLong("LastMenuSalePrice", lastMenuSalePrice);
+
+        ListTag salesTag = new ListTag();
+        for (InnMenuSale sale : recentMenuSales) {
+            salesTag.add(sale.save());
+        }
+        tag.put("RecentMenuSales", salesTag);
+
         return tag;
     }
 
@@ -211,6 +339,7 @@ public class Inn {
         }
         inn.isSpawned = tag.getBoolean("IsSpawned");
         inn.isActive = tag.getBoolean("IsActive");
+        if(tag.hasUUID("EconomyId"))inn.economyId=tag.getUUID("EconomyId");
         inn.balance = tag.getDouble("Balance");
 
         ListTag roomsTag = tag.getList("Rooms", Tag.TAG_COMPOUND);
@@ -221,6 +350,25 @@ public class Inn {
         ListTag propsTag = tag.getList("Props", Tag.TAG_COMPOUND);
         for (int i = 0; i < propsTag.size(); i++) {
             inn.addProp(InnProp.load(propsTag.getCompound(i)));
+        }
+
+        ListTag menuTag = tag.getList("MenuEntries", Tag.TAG_COMPOUND);
+        for (int i = 0; i < menuTag.size(); i++) {
+            inn.addMenuEntry(InnMenuEntry.load(menuTag.getCompound(i)));
+        }
+        if (tag.contains("CustomerRouteId")) {
+            inn.setCustomerRouteId(tag.getString("CustomerRouteId"));
+        }
+        if (tag.contains("CustomerRouteMinSeconds") || tag.contains("CustomerRouteMaxSeconds")) {
+            inn.setCustomerRouteTiming(tag.getInt("CustomerRouteMinSeconds"), tag.getInt("CustomerRouteMaxSeconds"));
+        }
+        inn.totalMenuSales = tag.getInt("TotalMenuSales");
+        inn.totalMenuRevenue = tag.getLong("TotalMenuRevenue");
+        inn.lastMenuSaleItem = tag.getString("LastMenuSaleItem");
+        inn.lastMenuSalePrice = tag.getLong("LastMenuSalePrice");
+        ListTag salesTag = tag.getList("RecentMenuSales", Tag.TAG_COMPOUND);
+        for (int i = 0; i < salesTag.size(); i++) {
+            inn.recentMenuSales.add(InnMenuSale.load(salesTag.getCompound(i)));
         }
 
         return inn;

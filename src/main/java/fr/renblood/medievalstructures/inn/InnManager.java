@@ -21,6 +21,18 @@ public class InnManager extends SavedData {
     public InnManager() {
     }
 
+    /** Standard Minecraft SavedData save, verified read-only before proof. */
+    public void persist(ServerLevel level){
+        if(!level.getServer().isSameThread())throw new IllegalStateException("Server thread required");
+        try{
+            java.nio.file.Path root=level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+            java.nio.file.Path folder=net.minecraft.world.level.dimension.DimensionType.getStorageFolder(level.dimension(),root).resolve("data");
+            setDirty();save(folder.resolve(DATA_NAME+".dat").toFile());
+            CompoundTag stored=net.minecraft.nbt.NbtIo.readCompressed(folder.resolve(DATA_NAME+".dat").toFile());
+            if(!stored.getCompound("data").equals(save(new CompoundTag())))throw new java.io.IOException("Inn save not verified");
+        }catch(Exception failure){throw new IllegalStateException("Auberge à rapprocher : sauvegarde non vérifiée",failure);}
+    }
+
     public void addInn(Inn inn) {
         inns.add(inn);
         setDirty();
