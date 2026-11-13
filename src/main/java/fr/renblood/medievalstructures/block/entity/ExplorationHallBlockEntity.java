@@ -195,7 +195,7 @@ public class ExplorationHallBlockEntity extends BlockEntity implements MenuProvi
                 UUID uuid = c.hasUUID("UUID") ? c.getUUID("UUID") : null;
                 PacketExplorationAction.InvitationStatus status = PacketExplorationAction.InvitationStatus.PENDING;
                 if (c.contains("Status")) {
-                    status = PacketExplorationAction.InvitationStatus.valueOf(c.getString("Status"));
+                    try{status = PacketExplorationAction.InvitationStatus.valueOf(c.getString("Status"));}catch(IllegalArgumentException invalid){status=PacketExplorationAction.InvitationStatus.PENDING;}
                 }
                 savedConfigs.add(new PacketExplorationAction.PlayerConfig(c.getInt("Chests"), c.getInt("Animals"), name, uuid, status));
             }

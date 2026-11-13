@@ -26,3 +26,6 @@ adminsdk.json
 renblood-backups/
 preprod-validation/
 __onboarding_preview__/
+
+# Isolated exploration regression world (never version saves or private test config).
+run-exploration-tests/

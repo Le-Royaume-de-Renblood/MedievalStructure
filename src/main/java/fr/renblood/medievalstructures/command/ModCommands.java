@@ -131,12 +131,23 @@ public class ModCommands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         LiteralArgumentBuilder<CommandSourceStack> explorationCommand = Commands.literal("exploration")
+                .then(Commands.literal("status").requires(source->source.hasPermission(2)).executes(context->{
+                    context.getSource().sendSuccess(()->Component.literal(ExplorationManager.get(context.getSource().getServer().overworld()).diagnostics()),false);return 1;
+                }))
+                .then(Commands.literal("retour").executes(context->{
+                    ServerPlayer player=context.getSource().getPlayerOrException();var data=player.getPersistentData();
+                    if(!player.level().dimension().equals(ModDimensions.EXPLORATION_LEVEL_KEY)||!data.contains(fr.renblood.medievalstructures.event.ExplorationEventHandler.EXPLORATION_ORIGIN)){
+                        context.getSource().sendFailure(Component.literal("Aucune expédition ne permet de retrouver ton hall."));return 0;
+                    }
+                    ExplorationManager.get(player.server.overworld()).returnPlayerToHall(player,BlockPos.of(data.getLong(fr.renblood.medievalstructures.event.ExplorationEventHandler.EXPLORATION_ORIGIN)));return 1;
+                }))
                 .then(Commands.literal("tuto").executes(context -> {
                     var source = context.getSource();
                     source.sendSuccess(() -> Component.literal("Exploration — les repères").withStyle(net.minecraft.ChatFormatting.GOLD), false);
                     source.sendSuccess(() -> Component.literal("1. Prépare ton groupe au hall et réponds à l’invitation."), false);
                     source.sendSuccess(() -> Component.literal("2. Garde libre le coffre d’origine pour permettre le retour du contenu du camp."), false);
                     source.sendSuccess(() -> Component.literal("3. Si un coffre reste au camp après le retour, contacte l’équipe pour récupérer son contenu."), false);
+                source.sendSuccess(() -> Component.literal("4. Suivi et annulation au hall ; /ms exploration retour pour préparer ton retour personnel."),false);
                     if (source.hasPermission(2)) source.sendSuccess(() -> Component.literal(
                             "Équipe : /ms exploration incidents. Récupère les objets, puis utilise resolve <x> <y> <z>."), false);
                     return 1;
@@ -372,7 +383,7 @@ public class ModCommands {
                  return 0;
             }
             
-            context.getSource().sendSuccess(() -> Component.literal("Téléporté au monde d'exploration."), true);
+            context.getSource().sendSuccess(() -> Component.literal("Arrivée au camp en préparation."), true);
             return 1;
         } catch (Exception e) {
             context.getSource().sendFailure(Component.literal("Erreur: " + e.getMessage()));

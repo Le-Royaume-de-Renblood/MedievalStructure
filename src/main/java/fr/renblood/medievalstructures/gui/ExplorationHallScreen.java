@@ -69,6 +69,15 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
     private Button resendInviteButton;
     private Button removePlayerViewButton;
 
+    private fr.renblood.medievalstructures.util.ExplorationViewport viewport;
+    private String departurePhase="";
+    private int departureSeconds,departureProgress,refreshTicks;
+    private boolean canCancelDeparture,showHelp;
+    private long cancelConfirmation,lastAction;
+    private Button helpButton;
+    public void updateDeparture(String phase,int seconds,int progress,boolean canCancel){
+        departurePhase=phase;departureSeconds=seconds;departureProgress=progress;canCancelDeparture=canCancel;updateLaunchState();
+    }
     private long lastInviteTime = 0;
     private long lastHighlightRequest = 0;
     private boolean isDebugMode = false;
@@ -85,12 +94,14 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
 
     @Override
     protected void init() {
-        this.imageWidth = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, this.width - 40));
-        this.imageHeight = Math.min(PANEL_MAX_HEIGHT, Math.max(PANEL_MIN_HEIGHT, this.height - 34));
+        viewport=fr.renblood.medievalstructures.util.ExplorationViewport.fit(this.width,this.height);
+        this.width=viewport.width();this.height=viewport.height();
+        this.imageWidth=560;this.imageHeight=380;
         super.init();
         initWidgets();
         updateVisibility();
         requestHighlight();
+        lastHighlightRequest=System.currentTimeMillis();
         requestState();
     }
 
@@ -137,12 +148,13 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         launchButton = addRenderableWidget(new StyledButton(contentX, y + 92, actionW, 24,
                 Component.translatable("gui.medieval_structures.exploration.launch"), this::onLaunch, ButtonStyle.SUCCESS));
         viewButton = addRenderableWidget(new StyledButton(contentX, y + 122, actionW, 24,
-                Component.literal("Consulter la preparation"), b -> switchState(ScreenState.VIEW_EXPLORATION), ButtonStyle.SECONDARY));
+                Component.literal("Voir l’équipe"), b -> switchState(ScreenState.VIEW_EXPLORATION), ButtonStyle.SECONDARY));
         talentsButton = addRenderableWidget(new StyledButton(contentX, y + 152, actionW, 24,
                 Component.literal("Arbre des talents"), b -> switchState(ScreenState.TALENT_TREE), ButtonStyle.PRIMARY));
         cancelButton = addRenderableWidget(new StyledButton(contentX, y + 182, actionW, 22,
                 Component.literal("Annuler le lancement"), this::onCancel, ButtonStyle.DANGER));
 
+        helpButton=addRenderableWidget(new StyledButton(contentX,footerY,actionW,22,Component.literal("Aide au départ"),b->showHelp=!showHelp,ButtonStyle.SECONDARY));
         int rowY = y + 70;
         durationMinusButton = addRenderableWidget(new StyledButton(contentX, rowY, 28, 22, Component.literal("-"), b -> changeDuration(-1), ButtonStyle.SECONDARY));
         durationPlusButton = addRenderableWidget(new StyledButton(contentX + 148, rowY, 28, 22, Component.literal("+"), b -> changeDuration(1), ButtonStyle.SECONDARY));
@@ -169,10 +181,10 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         backButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
                 Component.translatable("gui.back"), b -> switchState(ScreenState.MAIN_MENU), ButtonStyle.SECONDARY));
 
-        viewPrevPlayerButton = addRenderableWidget(new StyledButton(contentX, y + 122, 28, 22, Component.literal("<"), b -> selectViewPlayer(-1), ButtonStyle.SECONDARY));
+        viewPrevPlayerButton = addRenderableWidget(new StyledButton(centerX + 10, y + 122, 28, 22, Component.literal("<"), b -> selectViewPlayer(-1), ButtonStyle.SECONDARY));
         viewNextPlayerButton = addRenderableWidget(new StyledButton(x + imageWidth - 46, y + 122, 28, 22, Component.literal(">"), b -> selectViewPlayer(1), ButtonStyle.SECONDARY));
-        resendInviteButton = addRenderableWidget(new StyledButton(x + imageWidth - 158, y + 92, 140, 22, Component.literal("Relancer invitation"), this::onResendInvite, ButtonStyle.PRIMARY));
-        removePlayerViewButton = addRenderableWidget(new StyledButton(x + imageWidth - 158, y + 122, 140, 22, Component.literal("Retirer joueur"), this::onRemovePlayerView, ButtonStyle.DANGER));
+        resendInviteButton = addRenderableWidget(new StyledButton(x + imageWidth - 178, y + 232, 160, 22, Component.literal("Relancer invitation"), this::onResendInvite, ButtonStyle.PRIMARY));
+        removePlayerViewButton = addRenderableWidget(new StyledButton(x + imageWidth - 178, y + 260, 160, 22, Component.literal("Retirer joueur"), this::onRemovePlayerView, ButtonStyle.DANGER));
         viewBackButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
                 Component.translatable("gui.back"), b -> switchState(ScreenState.MAIN_MENU), ButtonStyle.SECONDARY));
         talentBackButton = addRenderableWidget(new StyledButton(contentX, footerY, 82, 24,
@@ -204,6 +216,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         boolean talents = currentState == ScreenState.TALENT_TREE;
 
         setVisible(newExplorationButton, main);
+        setVisible(helpButton,main);
         setVisible(launchButton, main);
         setVisible(viewButton, main);
         setVisible(cancelButton, main);
@@ -258,7 +271,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
     private void updateViewWidgets() {
         ExplorationHallBlockEntity be = getBlockEntity();
         boolean hasConfig = be != null && be.hasExplorationReady() && !be.getSavedConfigs().isEmpty();
-        if (!hasConfig) return;
+        if (!hasConfig) {setVisible(resendInviteButton,false);setVisible(removePlayerViewButton,false);return;}
 
         viewPlayerIndex = Math.max(0, Math.min(viewPlayerIndex, be.getSavedConfigs().size() - 1));
         PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
@@ -274,13 +287,19 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
     private void updateLaunchState() {
         ExplorationHallBlockEntity be = getBlockEntity();
         boolean hasExplo = be != null && be.hasExplorationReady();
-        if (viewButton != null) viewButton.active = hasExplo;
-        if (cancelButton != null) cancelButton.active = hasExplo;
+        boolean busy=!departurePhase.isEmpty();
+        boolean coolingDown=System.currentTimeMillis()-lastAction<1200;
+        if(newExplorationButton!=null)newExplorationButton.active=!busy&&!coolingDown;
+        if (viewButton != null) viewButton.active = hasExplo&&!busy;
+        if (cancelButton != null) {
+            cancelButton.active=(hasExplo||canCancelDeparture)&&!coolingDown;
+            cancelButton.setMessage(Component.literal(cancelConfirmation>System.currentTimeMillis()?"Confirmer l’annulation":canCancelDeparture?"Annuler / remboursement":"Effacer la préparation"));
+        }
         if (launchButton == null) return;
 
-        launchButton.active = hasExplo;
+        launchButton.active = hasExplo&&!busy&&!coolingDown;
         launchButton.setMessage(Component.translatable("gui.medieval_structures.exploration.launch"));
-        if (hasExplo) {
+        if (hasExplo&&!busy&&!coolingDown) {
             boolean allAccepted = be.getSavedConfigs().stream()
                     .allMatch(c -> c.status == PacketExplorationAction.InvitationStatus.ACCEPTED);
             if (isDebugMode) {
@@ -295,7 +314,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
 
     private void addPlayerFromInput() {
         String name = playerNameBox.getValue().trim();
-        if (name.isEmpty()) return;
+        if (name.isEmpty()||playerConfigs.size()>=10) return;
         boolean exists = playerConfigs.stream().anyMatch(c -> c.playerName != null && c.playerName.equalsIgnoreCase(name));
         if (!exists) {
             playerConfigs.add(new PacketExplorationAction.PlayerConfig(1, 0, name));
@@ -422,15 +441,17 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
             PacketHandler.INSTANCE.sendToServer(new PacketLaunchExploration(pos));
-            this.onClose();
+            lastAction=System.currentTimeMillis();requestState();updateLaunchState();
         }
     }
 
     private void onCancel(Button button) {
         BlockPos pos = this.menu.getPos();
         if (pos != null) {
+            if(cancelConfirmation<System.currentTimeMillis()){cancelConfirmation=System.currentTimeMillis()+4000;updateLaunchState();return;}
+            cancelConfirmation=0;
             PacketHandler.INSTANCE.sendToServer(new PacketCancelExploration(pos));
-            this.onClose();
+            lastAction=System.currentTimeMillis();requestState();updateLaunchState();
         }
     }
 
@@ -466,24 +487,33 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         int x = leftPos;
         int y = topPos;
         guiGraphics.fill(x - 2, y - 2, x + imageWidth + 2, y + imageHeight + 2, 0xAA000000);
-        guiGraphics.fillGradient(x, y, x + imageWidth, y + imageHeight, 0xF0211B17, 0xF0101418);
-        guiGraphics.fill(x, y, x + imageWidth, y + 34, 0xFF2D241B);
-        guiGraphics.fill(x, y + 34, x + imageWidth, y + 35, 0xFF6B4D25);
-        guiGraphics.fill(x + 10, y + 42, x + imageWidth - 10, y + imageHeight - 44, 0x552B2B2B);
+        guiGraphics.fillGradient(x, y, x + imageWidth, y + imageHeight, 0xFC181B1E, 0xFC101315);
+        guiGraphics.fill(x, y, x + imageWidth, y + 34, 0xFF202427);
+        guiGraphics.fill(x, y + 34, x + imageWidth, y + 35, 0xFF8D7447);
+        guiGraphics.fill(x + 10, y + 42, x + imageWidth - 10, y + imageHeight - 44, 0x402B3034);
     }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        if (System.currentTimeMillis() - lastHighlightRequest > 1000) {
-            requestHighlight();
-            lastHighlightRequest = System.currentTimeMillis();
-        }
-
+        guiGraphics.pose().pushPose();guiGraphics.pose().scale(viewport.scale(),viewport.scale(),1);
+        mouseX=(int)viewport.logical(mouseX);mouseY=(int)viewport.logical(mouseY);
         renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         renderContent(guiGraphics);
         renderTooltip(guiGraphics, mouseX, mouseY);
+        guiGraphics.pose().popPose();
     }
+
+    @Override public void containerTick(){
+        super.containerTick();updateLaunchState();
+        if(++refreshTicks%20==0)requestState();
+        if((currentState==ScreenState.CREATE_EXPLORATION||currentState==ScreenState.VIEW_EXPLORATION)&&System.currentTimeMillis()-lastHighlightRequest>5000){requestHighlight();lastHighlightRequest=System.currentTimeMillis();}
+    }
+    @Override public boolean mouseClicked(double x,double y,int button){return super.mouseClicked(viewport.logical(x),viewport.logical(y),button);}
+    @Override public boolean mouseReleased(double x,double y,int button){return super.mouseReleased(viewport.logical(x),viewport.logical(y),button);}
+    @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){return super.mouseDragged(viewport.logical(x),viewport.logical(y),button,viewport.logical(dx),viewport.logical(dy));}
+    @Override public boolean mouseScrolled(double x,double y,double delta){return super.mouseScrolled(viewport.logical(x),viewport.logical(y),delta);}
+    @Override public void mouseMoved(double x,double y){super.mouseMoved(viewport.logical(x),viewport.logical(y));}
 
     private void renderContent(GuiGraphics guiGraphics) {
         int x = leftPos;
@@ -513,24 +543,34 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         int hallLevel = be != null ? be.getHallLevel() : 1;
         int completed = be != null ? be.getCompletedExplorations() : 0;
         int infoX = contentX + Math.min(220, (imageWidth - 36) / 2);
-        guiGraphics.drawString(this.font, hasExplo ? "Une exploration est prete." : "Prepare un depart depuis ce hall.", contentX, y + 39, TEXT, false);
-        guiGraphics.drawString(this.font, "Progression du hall", infoX, y + 62, GOLD, false);
+        guiGraphics.drawString(this.font,!departurePhase.isEmpty()?"Départ suivi depuis le hall":hasExplo?"Équipe prête à partir":"Préparer une expédition",contentX,y+42,TEXT,false);
+        if(!departurePhase.isEmpty()){
+            guiGraphics.drawString(font,font.plainSubstrByWidth(departurePhase,220),contentX,y+220,GOLD,false);
+            guiGraphics.fill(contentX,y+238,contentX+210,y+241,0xFF353B40);
+            guiGraphics.fill(contentX,y+238,contentX+210*departureProgress/100,y+241,GOLD);
+            guiGraphics.drawString(font,departureSeconds>0?String.format("%02d:%02d",departureSeconds/60,departureSeconds%60):"Le serveur prépare la suite…",contentX,y+250,MUTED_TEXT,false);
+        }
+        if(showHelp){
+            String[] help={"1. Configure les participants et leurs coffres.","2. Fais accepter les invitations, puis rassemble l’équipe.","3. Après le départ : préparation sans bloquer le serveur.","Retour automatique ; un coffre bloqué reste récupérable."};
+            for(int i=0;i<help.length;i++)guiGraphics.drawString(font,help[i],contentX,y+284+i*12,MUTED_TEXT,false);
+        }
+        guiGraphics.drawString(this.font, "Hall et progression", infoX, y + 62, GOLD, false);
         guiGraphics.drawString(this.font, "Niveau: " + hallLevel, infoX, y + 82, TEXT, false);
         guiGraphics.drawString(this.font, "Total hall: " + completed, infoX, y + 96, MUTED_TEXT, false);
         guiGraphics.drawString(this.font, "Vous: " + getClientCompletedExplorations(), infoX, y + 110, MUTED_TEXT, false);
         guiGraphics.drawString(this.font, "Stats actuelles", infoX, y + 136, GOLD, false);
-        guiGraphics.drawString(this.font, "Temps max: " + getClientMaxDuration() + " min", infoX, y + 156, TEXT, false);
-        guiGraphics.drawString(this.font, "Coffres max: " + getClientMaxChests() + " / joueur", infoX, y + 170, TEXT, false);
-        guiGraphics.drawString(this.font, "Animaux max: " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER + " / joueur", infoX, y + 184, TEXT, false);
+        guiGraphics.drawString(this.font, "Durée maximale : " + getClientMaxDuration() + " min", infoX, y + 156, TEXT, false);
+        guiGraphics.drawString(this.font, "Coffres par joueur : " + getClientMaxChests(), infoX, y + 170, TEXT, false);
+        guiGraphics.drawString(this.font, "Animaux par joueur : " + ExplorationProgression.MAX_ANIMALS_PER_PLAYER, infoX, y + 184, TEXT, false);
         if (hasExplo) {
             int totalChests = be.getSavedConfigs().stream().mapToInt(c -> c.chestCount).sum();
             int totalAnimals = be.getSavedConfigs().stream().mapToInt(c -> c.animalCount).sum();
             int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
-            guiGraphics.drawString(this.font, "Preparation", infoX, y + 210, GOLD, false);
+            guiGraphics.drawString(this.font, "Préparation", infoX, y + 210, GOLD, false);
             guiGraphics.drawString(this.font, be.getSavedDuration() + " min  J:" + be.getSavedConfigs().size() + "  C:" + totalChests + "  A:" + totalAnimals, infoX, y + 230, MUTED_TEXT, false);
-            guiGraphics.drawString(this.font, "Cout: " + ExplorationCostCalculator.formatCost(cost), infoX, y + 244, GOLD, false);
+            guiGraphics.drawString(this.font, "Coût : " + ExplorationCostCalculator.formatCost(cost), infoX, y + 244, GOLD, false);
         } else {
-            guiGraphics.drawString(this.font, "Aucune configuration sauvegardee.", infoX, y + 210, MUTED_TEXT, false);
+            guiGraphics.drawString(this.font, "Aucune équipe préparée.", infoX, y + 210, MUTED_TEXT, false);
         }
     }
 
@@ -540,14 +580,14 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         int configW = Math.max(132, leftPos + imageWidth - 18 - configX);
         int configCenter = configX + configW / 2;
 
-        guiGraphics.drawString(this.font, "Creation rapide", contentX, y + 40, TEXT, false);
+        guiGraphics.drawString(this.font, "Préparer le départ", contentX, y + 40, TEXT, false);
         guiGraphics.drawString(this.font, "Duree (max " + getClientAvailableDurations().get(getClientAvailableDurations().size() - 1) + ")", contentX, y + 54, MUTED_TEXT, false);
         drawCentered(guiGraphics, selectedDuration + " min", contentX + 88, y + 65, GOLD);
         guiGraphics.drawString(this.font, "Ajouter un joueur", contentX, y + 109, MUTED_TEXT, false);
         guiGraphics.drawString(this.font, "Participants: " + playerConfigs.size(), contentX, y + 158, TEXT, false);
-        for (int i = 0; i < Math.min(playerConfigs.size(), 3); i++) {
+        for (int i = currentPlayerIndex/6*6; i < Math.min(playerConfigs.size(), currentPlayerIndex/6*6+6); i++) {
             int color = i == currentPlayerIndex ? GOLD : MUTED_TEXT;
-            guiGraphics.drawString(this.font, (i + 1) + ". " + playerConfigs.get(i).playerName, contentX, y + 176 + i * 12, color, false);
+            guiGraphics.drawString(this.font, (i + 1) + ". " + playerConfigs.get(i).playerName, contentX, y + 176 + (i%6) * 12, color, false);
         }
 
         guiGraphics.drawString(this.font, "Configuration joueur", configX, y + 40, TEXT, false);
@@ -558,25 +598,25 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
         drawCentered(guiGraphics, String.valueOf(config.animalCount), configCenter, y + 220, TEXT);
 
         int cost = ExplorationCostCalculator.calculateTotalCost(selectedDuration, playerConfigs);
-        guiGraphics.drawString(this.font, "Cout total: " + ExplorationCostCalculator.formatCost(cost), contentX + 96, y + imageHeight - 26, GOLD, false);
+        guiGraphics.drawString(this.font, "Coût total : " + ExplorationCostCalculator.formatCost(cost), contentX + 96, y + imageHeight - 26, GOLD, false);
     }
 
     private void renderView(GuiGraphics guiGraphics, int contentX, int centerX, int y) {
         ExplorationHallBlockEntity be = getBlockEntity();
         if (be == null || !be.hasExplorationReady()) {
-            guiGraphics.drawString(this.font, "Aucune exploration sauvegardee.", contentX, y + 54, MUTED_TEXT, false);
+            guiGraphics.drawString(this.font, "Aucune équipe enregistrée.", contentX, y + 54, MUTED_TEXT, false);
             return;
         }
 
         int cost = ExplorationCostCalculator.calculateTotalCost(be.getSavedDuration(), be.getSavedConfigs());
-        guiGraphics.drawString(this.font, "Duree: " + be.getSavedDuration() + " min", contentX, y + 48, TEXT, false);
+        guiGraphics.drawString(this.font, "Durée : " + be.getSavedDuration() + " min", contentX, y + 48, TEXT, false);
         guiGraphics.drawString(this.font, "Total: " + ExplorationCostCalculator.formatCost(cost), contentX, y + 64, GOLD, false);
         guiGraphics.drawString(this.font, "Participants", contentX, y + 88, MUTED_TEXT, false);
 
-        for (int i = 0; i < Math.min(be.getSavedConfigs().size(), 6); i++) {
+        for (int i = viewPlayerIndex/6*6; i < Math.min(be.getSavedConfigs().size(), viewPlayerIndex/6*6+6); i++) {
             PacketExplorationAction.PlayerConfig row = be.getSavedConfigs().get(i);
             int color = i == viewPlayerIndex ? GOLD : statusColor(row.status);
-            guiGraphics.drawString(this.font, (i + 1) + ". " + row.playerName + " - " + statusText(row.status), contentX, y + 105 + i * 13, color, false);
+            guiGraphics.drawString(this.font, (i + 1) + ". " + row.playerName + " - " + statusText(row.status), contentX, y + 105 + (i%6) * 13, color, false);
         }
 
         PacketExplorationAction.PlayerConfig config = be.getSavedConfigs().get(viewPlayerIndex);
@@ -608,7 +648,7 @@ public class ExplorationHallScreen extends AbstractContainerScreen<ExplorationHa
                 },
                 {
                         new TalentNode(6, "Lit", "d'exploration", ""),
-                        new TalentNode(7, "Magnetite", "d'exploration", ""),
+                        new TalentNode(7, "Magnétite", "d'exploration", ""),
                         new TalentNode(8, "Place", "d'inventaire", "+ 1")
                 }
         };

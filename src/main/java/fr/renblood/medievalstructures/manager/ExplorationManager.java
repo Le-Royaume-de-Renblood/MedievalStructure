@@ -53,12 +53,161 @@ public class ExplorationManager extends SavedData {
     private static final int FIRST_SEARCH_RADIUS = 96;
     private static final int SEARCH_RADIUS_STEP = 48;
     private static final int SEARCH_RADIUS_LIMIT = 900;
-    private static final int SEARCH_CANDIDATES = ((SEARCH_RADIUS_LIMIT - 1 - FIRST_SEARCH_RADIUS)
-            / SEARCH_RADIUS_STEP + 1) * SEARCH_DIRECTIONS;
+    private static final int SEARCH_CANDIDATES = 24;
     private static final int CLEANUP_BLOCKS_PER_TICK = 48;
     private final List<PendingExploration> pendingExplorations = new ArrayList<>();
     private final List<ActiveExploration> activeExplorations = new ArrayList<>();
     private final Deque<BlockPos> cleanupBlocks = new ArrayDeque<>();
+    private final Map<BlockPos, net.minecraft.world.level.block.state.BlockState> cleanupRestore = new HashMap<>();
+    private ChunkPreparation cleanupJob;
+    private long nextCleanupRetry;
+
+    public static final String PREVIOUS_SPAWN="RenbloodPreviousExpeditionSpawn";
+    private final Map<UUID,Arrival> arrivals=new LinkedHashMap<>();
+    private static final class Arrival {
+        final ServerPlayer player;
+        final ServerLevel level;
+        final BlockPos target;
+        final ActiveExploration camp;
+        final ChunkPreparation terrain;
+        Arrival(ServerPlayer player,ServerLevel level,BlockPos target,ActiveExploration camp){
+            this.player=player;this.level=level;this.target=target;this.camp=camp;
+            this.terrain=ExplorationTerrain.prepare(level,ExplorationTerrain.around(target));
+        }
+    }
+    public void returnPlayerToHall(ServerPlayer player,BlockPos origin){
+        Arrival previous=arrivals.remove(player.getUUID());if(previous!=null)previous.terrain.close();
+        arrivals.put(player.getUUID(),new Arrival(player,player.server.overworld(),origin.above(),null));
+        player.sendSystemMessage(Component.literal("Retour au hall en préparation…").withStyle(net.minecraft.ChatFormatting.GOLD));
+    }
+    public static void restoreRespawn(ServerPlayer player){
+        var data=player.getPersistentData();
+        if(data.contains(PREVIOUS_SPAWN)){
+            var saved=data.getCompound(PREVIOUS_SPAWN);
+            var key=net.minecraft.world.level.Level.OVERWORLD;
+            var dimension=net.minecraft.resources.ResourceLocation.tryParse(saved.getString("Dimension"));
+            if(dimension!=null)key=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,dimension);
+            player.setRespawnPosition(key,saved.contains("Position")?BlockPos.of(saved.getLong("Position")):null,saved.getFloat("Angle"),saved.getBoolean("Forced"),false);
+            data.remove(PREVIOUS_SPAWN);
+        }
+    }
+    private boolean tickArrivals(MinecraftServer server){
+        if(arrivals.isEmpty())return false;
+        UUID id=arrivals.keySet().iterator().next();Arrival arrival=arrivals.remove(id);
+        if(server.getPlayerList().getPlayer(id)!=arrival.player){arrival.terrain.close();return true;}
+        if(arrival.camp!=null&&(!activeExplorations.contains(arrival.camp)||arrival.camp.ticksRemaining<=0)){
+            arrival.terrain.close();returnPlayerToHall(arrival.player,arrival.camp.origin);return true;
+        }
+        var state=arrival.terrain.tick();
+        if(state==ChunkPreparation.State.WORKING){arrivals.put(id,arrival);return true;}
+        if(state==ChunkPreparation.State.READY){
+            arrival.player.teleportTo(arrival.level,arrival.target.getX()+.5,arrival.target.getY(),arrival.target.getZ()+.5,0,0);
+            if(arrival.camp!=null){enroll(arrival.player,arrival.camp);setDirty();}
+            else{
+                restoreRespawn(arrival.player);
+                var data=arrival.player.getPersistentData();data.remove(ExplorationEventHandler.EXPLORATION_ID);
+                data.remove(ExplorationEventHandler.EXPLORATION_ORIGIN);data.remove(ExplorationEventHandler.EXPLORATION_BED_RESPAWN);
+                data.remove(ExplorationEventHandler.DIED_IN_EXPLORATION);
+                arrival.player.sendSystemMessage(Component.literal("Retour au hall terminé.").withStyle(net.minecraft.ChatFormatting.GREEN));
+            }
+        }else arrival.player.sendSystemMessage(Component.literal("Terrain de retour indisponible. Reconnecte-toi ou demande au staff de relancer le retour.").withStyle(net.minecraft.ChatFormatting.RED));
+        arrival.terrain.close();return true;
+    }
+
+    public record Status(String phase, int seconds, int progress, boolean canCancel) {}
+    public Status status(BlockPos origin, UUID viewer) {
+        for (var row : pendingExplorations) if (row.origin.equals(origin)) {
+            int progress = row.construction != null ? row.construction.progress() : row.terrain != null ? row.terrain.progress() : 0;
+            String phase = row.state == ExplorationState.FAILED ? row.failureReason
+                    : row.state == ExplorationState.COUNTDOWN ? "Rassemblement et départ"
+                    : row.construction != null ? "Construction du camp" : "Préparation du terrain";
+            return new Status(phase, Math.max(0, row.ticksRemaining / 20), progress, Objects.equals(viewer, row.launcherUuid));
+        }
+        for (var row : activeExplorations) if (row.origin.equals(origin))
+            return new Status(row.ticksRemaining <= 0 ? "Retour en préparation" : "Exploration en cours", Math.max(0,row.ticksRemaining/20),0,false);
+        return new Status("",0,0,false);
+    }
+
+    public void setInvited(BlockPos origin, UUID payer, Collection<UUID> invited) {
+        var row = pendingPayment(origin, payer);
+        if (row != null) { row.invited.addAll(invited); setDirty(); }
+    }
+
+    private List<ServerPlayer> departurePlayers(ServerLevel level, PendingExploration row) {
+        AABB zone = new AABB(row.origin).inflate(3,2,3);
+        return level.getPlayers(player -> !player.isSpectator() && zone.intersects(player.getBoundingBox())
+                && (row.invited.isEmpty() || row.invited.contains(player.getUUID())));
+    }
+
+    private void failPreparation(ServerLevel level, PendingExploration row, String reason) {
+        if (row.terrain != null) { row.terrain.close(); row.terrain = null; }
+        row.state = ExplorationState.FAILED; row.failureReason = reason;
+        updateCountdownDisplay(level,row.displayUUID,reason + " — annulation disponible au hall");
+        var payer = row.launcherUuid==null?null:level.getServer().getPlayerList().getPlayer(row.launcherUuid);
+        if (payer != null) payer.sendSystemMessage(Component.literal(reason + ". Ouvre le hall pour annuler et demander le remboursement.").withStyle(net.minecraft.ChatFormatting.RED));
+        LOGGER.warn("Exploration {} en attente : {}",row.origin,reason); setDirty();
+    }
+
+    private boolean prepareCamp(ServerLevel level, PendingExploration row) {
+        if (row.searchCandidate >= SEARCH_CANDIDATES) { failPreparation(level.getServer().overworld(),row,"Aucun camp sûr trouvé"); return false; }
+        BlockPos candidate = row.campPos != null ? row.campPos : candidatePosition(row.targetX,row.searchCandidate);
+        if (row.terrain == null) row.terrain = ExplorationTerrain.prepare(level, ExplorationTerrain.around(candidate));
+        var state = row.terrain.tick();
+        if (state == ChunkPreparation.State.FAILED) { failPreparation(level.getServer().overworld(),row,"Le terrain n’est pas disponible"); return false; }
+        if (state != ChunkPreparation.State.READY) return false;
+        if (row.campPos == null) {
+            row.campPos = findSafeCandidate(level,row.targetX,row.searchCandidate);
+            if (row.campPos == null) { row.terrain.close(); row.terrain=null; row.searchCandidate++; setDirty(); return false; }
+        }
+        if (row.construction == null) row.construction = new CampConstruction(level,row.campPos);
+        boolean done = row.construction.tick(level);
+        for (BlockPos changed : row.construction.changed)
+            row.campOriginals.putIfAbsent(changed,row.construction.before.get(changed));
+        setDirty(); return done;
+    }
+
+    private static BlockPos candidatePosition(int startX, int candidate) {
+        int radius = FIRST_SEARCH_RADIUS + candidate / SEARCH_DIRECTIONS * SEARCH_RADIUS_STEP;
+        double angle = candidate % SEARCH_DIRECTIONS * (2 * Math.PI / SEARCH_DIRECTIONS);
+        return new BlockPos(startX+(int)(Math.cos(angle)*radius),64,(int)(Math.sin(angle)*radius));
+    }
+
+    private boolean prepareReturn(ServerLevel level, ActiveExploration active) {
+        if (active.returnOrigin == null) {
+            Set<ChunkPos> origin = new LinkedHashSet<>(ExplorationTerrain.around(active.origin));
+            active.chestMapping.values().forEach(pos -> origin.add(new ChunkPos(pos)));
+            if (active.animalReturnPen != null) origin.addAll(ExplorationTerrain.around(active.animalReturnPen));
+            active.returnOrigin = ExplorationTerrain.prepare(level.getServer().overworld(),origin);
+        }
+        var state = active.returnOrigin.tick();
+        if (state == ChunkPreparation.State.FAILED) {
+            if(active.returnCamp!=null){active.returnCamp.close();active.returnCamp=null;}
+            active.returnOrigin=null; active.returnRetry = level.getGameTime()+600;
+            LOGGER.warn("Retour d’exploration {} différé : terrain du hall indisponible",active.id); return false;
+        }
+        if (state != ChunkPreparation.State.READY) return false;
+        if (active.returnCamp == null) {
+            Set<ChunkPos> camp = new LinkedHashSet<>(ExplorationTerrain.around(active.spawnPos));
+            active.chestMapping.keySet().forEach(pos -> camp.add(new ChunkPos(pos)));
+            active.returnCamp=ExplorationTerrain.prepare(level,camp);
+        }
+        state=active.returnCamp.tick();
+        if (state==ChunkPreparation.State.FAILED) {
+            active.returnOrigin.close(); active.returnOrigin=null; active.returnCamp=null;
+            active.returnRetry=level.getGameTime()+600; return false;
+        }
+        return state==ChunkPreparation.State.READY;
+    }
+
+    private static ListTag writeStates(Map<BlockPos, net.minecraft.world.level.block.state.BlockState> states) {
+        ListTag list = new ListTag();
+        states.forEach((pos,state)->{CompoundTag entry=new CompoundTag();entry.putLong("Pos",pos.asLong());entry.put("State",net.minecraft.nbt.NbtUtils.writeBlockState(state));list.add(entry);});
+        return list;
+    }
+    private static void readStates(CompoundTag tag,String key,Map<BlockPos, net.minecraft.world.level.block.state.BlockState> states) {
+        for(Tag raw:tag.getList(key,Tag.TAG_COMPOUND)) {var entry=(CompoundTag)raw;
+            states.put(BlockPos.of(entry.getLong("Pos")),net.minecraft.nbt.NbtUtils.readBlockState(net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(),entry.getCompound("State")));}
+    }
     private final RetainedChestRegistry retainedChests = new RetainedChestRegistry();
     private int nextExplorationX = 0;
     
@@ -82,6 +231,11 @@ public class ExplorationManager extends SavedData {
             if(!net.minecraft.nbt.NbtIo.readCompressed(file.toFile()).getCompound("data").equals(save(new CompoundTag())))throw new java.io.IOException("Exploration save not verified");
         }catch(Exception failure){throw new IllegalStateException("Sauvegarde d’exploration à rapprocher",failure);}
     }
+    public String diagnostics(){
+        return pendingExplorations.size()+" départ(s), "+activeExplorations.size()+" expédition(s), "+arrivals.size()
+                +" arrivée(s) préparée(s), "+cleanupBlocks.size()+" blocs à restaurer, "+retainedChests.snapshot().size()+" coffre(s) retenu(s)";
+    }
+
     public RetainedChestRegistry.Page retainedChestPage(int page) {
         return retainedChests.page(page);
     }
@@ -113,7 +267,17 @@ public class ExplorationManager extends SavedData {
         player.connection.send(new ClientboundInitializeBorderPacket(border));
     }
 
+    private static void rememberRespawn(ServerPlayer player){
+        if(!player.getPersistentData().contains(PREVIOUS_SPAWN)){
+            CompoundTag previous=new CompoundTag();previous.putString("Dimension",player.getRespawnDimension().location().toString());
+            if(player.getRespawnPosition()!=null)previous.putLong("Position",player.getRespawnPosition().asLong());
+            previous.putFloat("Angle",player.getRespawnAngle());previous.putBoolean("Forced",player.isRespawnForced());
+            player.getPersistentData().put(PREVIOUS_SPAWN,previous);
+        }
+    }
+
     private static void enroll(ServerPlayer player, ActiveExploration active) {
+        rememberRespawn(player);
         active.participants.add(player.getUUID());
         player.getPersistentData().putUUID(ExplorationEventHandler.EXPLORATION_ID, active.id);
         player.getPersistentData().putLong(ExplorationEventHandler.EXPLORATION_ORIGIN, active.origin.asLong());
@@ -121,13 +285,12 @@ public class ExplorationManager extends SavedData {
     }
 
     public boolean joinLatest(ServerPlayer player) {
-        if (activeExplorations.isEmpty()) return false;
-        var active = activeExplorations.get(activeExplorations.size() - 1);
+        var active=activeExplorations.stream().filter(row->row.ticksRemaining>0).reduce((a,b)->b).orElse(null);
+        if(active==null)return false;
         ServerLevel level = player.getServer().getLevel(ModDimensions.EXPLORATION_LEVEL_KEY);
         if (level == null) return false;
-        player.teleportTo(level, active.spawnPos.getX() + 0.5, active.spawnPos.getY(), active.spawnPos.getZ() + 0.5, 0, 0);
-        enroll(player, active);
-        setDirty();
+        Arrival previous=arrivals.remove(player.getUUID());if(previous!=null)previous.terrain.close();
+        arrivals.put(player.getUUID(),new Arrival(player,level,active.spawnPos,active));
         return true;
     }
 
@@ -151,10 +314,7 @@ public class ExplorationManager extends SavedData {
             return;
         }
         BlockPos origin = BlockPos.of(data.getLong(ExplorationEventHandler.EXPLORATION_ORIGIN));
-        player.teleportTo(player.getServer().overworld(), origin.getX() + 0.5, origin.getY() + 1, origin.getZ() + 0.5, 0, 0);
-        data.remove(ExplorationEventHandler.EXPLORATION_ID);
-        data.remove(ExplorationEventHandler.EXPLORATION_ORIGIN);
-        data.remove(ExplorationEventHandler.EXPLORATION_BED_RESPAWN);
+        returnPlayerToHall(player,origin);
         player.sendSystemMessage(Component.literal(matches.size() > 1
                 ? "Ancienne exploration ambiguë : retour au hall. Demande au staff de vérifier ton expédition."
                 : "Ton exploration est terminée. Tu es de retour au hall."));
@@ -235,6 +395,9 @@ public class ExplorationManager extends SavedData {
             PendingExploration explo = it.next();
             if (explo.origin.equals(origin)) {
                 removeCountdownDisplay(level, explo.displayUUID);
+                if (explo.terrain != null) explo.terrain.close();
+                explo.campOriginals.entrySet().stream().sorted(Comparator.comparingLong(entry->chunkKey(entry.getKey())))
+                        .forEach(entry->{cleanupBlocks.addLast(entry.getKey());cleanupRestore.put(entry.getKey(),entry.getValue());});
                 it.remove();
                 setDirty();
                 return explo.paidAmount;
@@ -304,7 +467,7 @@ public class ExplorationManager extends SavedData {
     public void tick(MinecraftServer server) {
         ServerLevel explorationWorld = server.getLevel(ModDimensions.EXPLORATION_LEVEL_KEY);
         if (explorationWorld != null && !activeExplorations.isEmpty()) openSharedBorder(explorationWorld);
-        boolean searchedThisTick = false;
+        boolean searchedThisTick = tickArrivals(server);
         boolean returnDue = activeExplorations.stream().anyMatch(active -> active.ticksRemaining <= 1);
         Iterator<PendingExploration> itPending = pendingExplorations.iterator();
         while (itPending.hasNext()) {
@@ -313,7 +476,7 @@ public class ExplorationManager extends SavedData {
             
             if (explo.state == ExplorationState.COUNTDOWN) {
                 AABB zone = new AABB(explo.origin).inflate(3, 2, 3);
-                int playerCount = level.getEntitiesOfClass(ServerPlayer.class, zone).size();
+                int playerCount = departurePlayers(level,explo).size();
                 
                 if (!DEBUG_MODE && playerCount < explo.requiredPlayers) {
                     if (server.getTickCount() % 40 == 0) {
@@ -360,8 +523,9 @@ public class ExplorationManager extends SavedData {
                 if (searchedThisTick || returnDue || explorationWorld == null) continue;
                 if (!DEBUG_MODE) {
                     AABB zone = new AABB(explo.origin).inflate(3, 2, 3);
-                    int players = level.getPlayers(player -> zone.intersects(player.getBoundingBox())).size();
+                    int players = departurePlayers(level,explo).size();
                     if (players < explo.requiredPlayers) {
+                        if(explo.terrain!=null){explo.terrain.close();explo.terrain=null;}
                         if (server.getTickCount() % 20 == 0) {
                             updateCountdownDisplay(level, explo.displayUUID,
                                     "En attente de joueurs (" + players + "/" + explo.requiredPlayers + ")");
@@ -373,19 +537,16 @@ public class ExplorationManager extends SavedData {
                     updateCountdownDisplay(level, explo.displayUUID, "Recherche d’un camp…");
                 }
                 searchedThisTick = true;
-                BlockPos safe = findSafeCandidate(explorationWorld, explo.targetX, explo.searchCandidate++);
-                setDirty();
-                if (safe == null && explo.searchCandidate < SEARCH_CANDIDATES) continue;
-                if (safe == null) {
-                    safe = new BlockPos(explo.targetX, 150, 0);
-                    if (overlapsActiveCamp(safe.getX() + 2, safe.getZ())) {
-                        updateCountdownDisplay(level, explo.displayUUID, "Aucune zone libre. Annule le départ pour être remboursé.");
-                        continue;
-                    }
+                try {
+                    if (!prepareCamp(explorationWorld,explo)) continue;
+                    removeCountdownDisplay(level, explo.displayUUID);
+                    activeExplorations.add(teleportPlayers(server, explorationWorld, explo, explo.campPos));
+                    if (explo.terrain != null) explo.terrain.close();
+                } catch (RuntimeException failure) {
+                    LOGGER.error("Préparation du camp interrompue en {}",explo.origin,failure);
+                    failPreparation(level,explo,"Préparation interrompue, aucun nouveau départ automatique");
+                    continue;
                 }
-
-                removeCountdownDisplay(level, explo.displayUUID);
-                activeExplorations.add(teleportPlayers(server, explorationWorld, explo, safe));
                 itPending.remove();
                 setDirty();
             }
@@ -434,8 +595,11 @@ public class ExplorationManager extends SavedData {
             }
             
             if (active.ticksRemaining <= 0 && explorationWorld != null && !returnedThisTick) {
-                endExploration(server, explorationWorld, active);
+                if (explorationWorld.getGameTime() < active.returnRetry) continue;
                 returnedThisTick = true;
+                if (!prepareReturn(explorationWorld,active)) continue;
+                if(!endExploration(server, explorationWorld, active))continue;
+                active.returnOrigin.close(); active.returnCamp.close();
                 itActive.remove();
                 setDirty();
             }
@@ -467,10 +631,17 @@ public class ExplorationManager extends SavedData {
         }
     }
     
-    private void endExploration(MinecraftServer server, ServerLevel explorationWorld, ActiveExploration active) {
+    private boolean endExploration(MinecraftServer server, ServerLevel explorationWorld, ActiveExploration active) {
         ServerLevel overworld = server.overworld();
         Set<BlockPos> keptChests = new HashSet<>();
 
+        AABB zone = new AABB(active.spawnPos).inflate(2000, 320, 2000);
+        List<ServerPlayer> players = explorationWorld.getPlayers(player -> belongsTo(player, active));
+        List<Mob> animalsToReturn = collectLeashedAnimals(explorationWorld, zone, active.totalAnimals, active);
+
+        if(!returnLeashedAnimals(overworld,active.animalReturnPen,active.origin,animalsToReturn)){
+            active.returnRetry=explorationWorld.getGameTime()+600;return false;
+        }
         // Rapatrier les coffres
         for (Map.Entry<BlockPos, BlockPos> entry : active.chestMapping.entrySet()) {
             BlockPos destPos = entry.getKey();
@@ -503,10 +674,6 @@ public class ExplorationManager extends SavedData {
             }
         }
         
-        AABB zone = new AABB(active.spawnPos).inflate(2000, 320, 2000);
-        List<ServerPlayer> players = explorationWorld.getPlayers(player -> belongsTo(player, active));
-        List<Mob> animalsToReturn = collectLeashedAnimals(explorationWorld, zone, active.totalAnimals, active);
-        
         BlockPos returnPos = active.origin;
         
         for (ServerPlayer player : players) {
@@ -520,11 +687,11 @@ public class ExplorationManager extends SavedData {
             if (!animalsToReturn.isEmpty()) {
                 player.sendSystemMessage(Component.literal(animalsToReturn.size() + " animal(aux) rapatrie(s) autour de la table d'exploration.").withStyle(net.minecraft.ChatFormatting.GREEN));
             }
+            restoreRespawn(player);
             player.getPersistentData().remove(ExplorationEventHandler.EXPLORATION_ID);
             player.getPersistentData().remove(ExplorationEventHandler.EXPLORATION_ORIGIN);
             player.getPersistentData().remove(ExplorationEventHandler.EXPLORATION_BED_RESPAWN);
         }
-        returnLeashedAnimals(overworld, active.animalReturnPen, returnPos, animalsToReturn);
         BlockEntity originBe = overworld.getBlockEntity(active.origin);
         if (originBe instanceof ExplorationHallBlockEntity hall) {
             hall.recordCompletedExploration(active.launcherUuid);
@@ -544,7 +711,8 @@ public class ExplorationManager extends SavedData {
         active.builtBlocks.stream().distinct().filter(pos -> !keptChests.contains(pos))
                 .filter(pos -> activeExplorations.stream().noneMatch(other -> other != active && other.builtBlocks.contains(pos)))
                 .sorted(Comparator.comparingLong(ExplorationManager::chunkKey))
-                .forEach(cleanupBlocks::addLast);
+                .forEach(pos -> {cleanupBlocks.addLast(pos);cleanupRestore.put(pos,active.originalStates.getOrDefault(pos,Blocks.AIR.defaultBlockState()));});
+        return true;
     }
 
     private static long chunkKey(BlockPos pos) {
@@ -552,13 +720,19 @@ public class ExplorationManager extends SavedData {
     }
 
     private void cleanCamp(ServerLevel level) {
-        if (cleanupBlocks.isEmpty()) return;
-        long chunk = chunkKey(cleanupBlocks.peekFirst());
-        int remaining = CLEANUP_BLOCKS_PER_TICK;
-        while (remaining-- > 0 && !cleanupBlocks.isEmpty() && chunkKey(cleanupBlocks.peekFirst()) == chunk) {
-            level.setBlock(cleanupBlocks.peekFirst(), Blocks.AIR.defaultBlockState(), 2);
-            cleanupBlocks.removeFirst();
+        if (cleanupBlocks.isEmpty() || level.getGameTime()<nextCleanupRetry) return;
+        BlockPos first=cleanupBlocks.peekFirst();
+        if(cleanupJob==null)cleanupJob=ExplorationTerrain.prepare(level,List.of(new ChunkPos(first)));
+        var state=cleanupJob.tick();
+        if(state==ChunkPreparation.State.FAILED){cleanupJob=null;nextCleanupRetry=level.getGameTime()+600;return;}
+        if(state!=ChunkPreparation.State.READY)return;
+        long chunk=chunkKey(first),started=System.nanoTime();int remaining=CLEANUP_BLOCKS_PER_TICK;
+        while(remaining-->0&&!cleanupBlocks.isEmpty()&&chunkKey(cleanupBlocks.peekFirst())==chunk&&System.nanoTime()-started<2_000_000L){
+            BlockPos pos=cleanupBlocks.peekFirst();
+            level.setBlock(pos,cleanupRestore.getOrDefault(pos,Blocks.AIR.defaultBlockState()),2);
+            cleanupRestore.remove(pos);cleanupBlocks.removeFirst();
         }
+        if(cleanupBlocks.isEmpty()||chunkKey(cleanupBlocks.peekFirst())!=chunk){cleanupJob.close();cleanupJob=null;}
         setDirty();
     }
 
@@ -596,19 +770,14 @@ public class ExplorationManager extends SavedData {
 
     private void playCountdownMusic(ServerLevel level, BlockPos center, int secondsLeft) {
         float pitch = 0.75F + ((30 - Math.min(secondsLeft, 30)) % 8) * 0.08F;
-        level.getPlayers(p -> p.distanceToSqr(center.getX(), center.getY(), center.getZ()) < 1000).forEach(player -> {
-            level.playSound(null, player.blockPosition(), SoundEvents.NOTE_BLOCK_CHIME.get(), SoundSource.PLAYERS, 0.45F, pitch);
-            if (secondsLeft <= 5) {
-                level.playSound(null, player.blockPosition(), SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 0.7F, 1.0F + secondsLeft * 0.05F);
-            }
-        });
+        level.playSound(null,center,SoundEvents.NOTE_BLOCK_CHIME.get(),SoundSource.PLAYERS,.35F,pitch);
     }
 
     private ActiveExploration teleportPlayers(MinecraftServer server, ServerLevel explorationWorld,
                                                PendingExploration explo, BlockPos safePos) {
         ServerLevel originLevel = server.overworld();
         AABB zone = new AABB(explo.origin).inflate(3, 2, 3);
-        List<ServerPlayer> players = originLevel.getEntitiesOfClass(ServerPlayer.class, zone);
+        List<ServerPlayer> players = departurePlayers(originLevel,explo);
         awardExplorerStartXp(server, originLevel, explo, players.size());
         
         int targetX = safePos.getX();
@@ -617,36 +786,16 @@ public class ExplorationManager extends SavedData {
         openSharedBorder(explorationWorld);
 
         // Construction du camp
-        List<BlockPos> builtBlocks = new ArrayList<>();
+        List<BlockPos> builtBlocks = new ArrayList<>(explo.campOriginals.keySet());
         Map<BlockPos, BlockPos> chestMapping = new HashMap<>();
         
         int totalAnimals = explo.totalAnimals;
         BlockPos firePos = new BlockPos(targetX, y, targetZ);
         
-        BlockPos.MutableBlockPos mPos = new BlockPos.MutableBlockPos();
-        for (int dx = -6; dx <= 6; dx++) {
-            for (int dz = -6; dz <= 6; dz++) {
-                if (dx*dx + dz*dz <= 36) {
-                    mPos.set(targetX + dx, y - 1, targetZ + dz);
-                    var ground = explorationWorld.getBlockState(mPos);
-                    if (!ground.isSolid() || ground.is(Blocks.GRASS_BLOCK) || ground.is(Blocks.WATER)) {
-                        explorationWorld.setBlock(mPos, Blocks.COARSE_DIRT.defaultBlockState(), 2);
-                        builtBlocks.add(mPos.immutable());
-                    }
-                    
-                    for (int dy = 0; dy <= 5; dy++) {
-                        mPos.set(targetX + dx, y + dy, targetZ + dz);
-                        var block = explorationWorld.getBlockState(mPos);
-                        if (block.isSolid() || block.is(Blocks.WATER)) {
-                            explorationWorld.setBlock(mPos, Blocks.AIR.defaultBlockState(), 2);
-                        }
-                    }
-                }
-            }
-        }
         explorationWorld.setBlock(firePos, (explo.spawnLodestone ? Blocks.LODESTONE : Blocks.CAMPFIRE).defaultBlockState(), 3);
         builtBlocks.add(firePos);
         buildAnimalTethers(explorationWorld, targetX, y, targetZ, totalAnimals, builtBlocks);
+        players.forEach(ExplorationManager::rememberRespawn);
         if (explo.spawnBeds) {
             buildExplorerBeds(explorationWorld, targetX, y, targetZ, players, builtBlocks);
         }
@@ -658,13 +807,16 @@ public class ExplorationManager extends SavedData {
             for (BlockPos sourcePos : entry.getValue()) {
                 if (!copiedSources.add(sourcePos)
                         || activeExplorations.stream().anyMatch(active -> active.chestMapping.containsValue(sourcePos))) continue;
+                if (!ExplorationTerrain.loaded(originLevel,sourcePos)) continue;
                 BlockEntity source = originLevel.getBlockEntity(sourcePos);
                 if (!(source instanceof ChestBlockEntity sourceChest)) continue;
                 BlockPos destPos = null;
                 while (offsets.hasNext()) {
                     var offset = offsets.next();
                     BlockPos candidate = new BlockPos(targetX + offset.x(), y, targetZ + offset.z());
-                    if (explorationWorld.isEmptyBlock(candidate) && explorationWorld.isEmptyBlock(candidate.above())) {
+                    if (Math.abs(candidate.getX()-targetX)<=14 && Math.abs(candidate.getZ()-targetZ)<=14
+                            && ExplorationTerrain.loaded(explorationWorld,candidate)
+                            && explorationWorld.isEmptyBlock(candidate) && explorationWorld.isEmptyBlock(candidate.above())) {
                         destPos = candidate;
                         break;
                     }
@@ -675,6 +827,7 @@ public class ExplorationManager extends SavedData {
                     continue;
                 }
                 BlockPos ground = destPos.below();
+                if(explorationWorld.getBlockEntity(ground)!=null)continue;
                 if (!explorationWorld.getBlockState(ground).isSolid()) {
                     explorationWorld.setBlock(ground, Blocks.COARSE_DIRT.defaultBlockState(), 2);
                     builtBlocks.add(ground);
@@ -719,6 +872,8 @@ public class ExplorationManager extends SavedData {
         int durationTicks = explo.durationMinutes * 60 * 20;
         ActiveExploration active = new ActiveExploration(finalSpawn, durationTicks, explo.origin,
                 chestMapping, builtBlocks, explo.totalAnimals, explo.animalReturnPen, explo.launcherUuid);
+        for(BlockPos pos:builtBlocks)active.originalStates.put(pos,explo.campOriginals.getOrDefault(pos,
+                explo.construction.before.getOrDefault(pos,Blocks.AIR.defaultBlockState())));
         for (ServerPlayer player : players) {
             player.teleportTo(explorationWorld, finalSpawn.getX() + 0.5, y, finalSpawn.getZ() + 0.5, 0, 0);
             explorationWorld.playSound(null, finalSpawn, SoundEvents.PORTAL_TRAVEL, SoundSource.PLAYERS, 0.35F, 1.35F);
@@ -759,12 +914,10 @@ public class ExplorationManager extends SavedData {
     
     private BlockPos findSafeCandidate(ServerLevel level, int startX, int candidate) {
         if (candidate < 0 || candidate >= SEARCH_CANDIDATES) return null;
-        int radius = FIRST_SEARCH_RADIUS + candidate / SEARCH_DIRECTIONS * SEARCH_RADIUS_STEP;
-        double angle = candidate % SEARCH_DIRECTIONS * (2 * Math.PI / SEARCH_DIRECTIONS);
-        int x = startX + (int) (Math.cos(angle) * radius);
-        int z = (int) (Math.sin(angle) * radius);
-        if (overlapsActiveCamp(x + 2, z)) return null;
-        level.getChunk(x >> 4, z >> 4);
+        BlockPos candidatePos=candidatePosition(startX,candidate);
+        int x=candidatePos.getX(),z=candidatePos.getZ();
+        if (overlapsActiveCamp(x+2,z)) return null;
+        if(ExplorationTerrain.around(candidatePos).stream().anyMatch(pos->level.getChunkSource().getChunkNow(pos.x,pos.z)==null))return null;
 
         var biome = level.getBiome(new BlockPos(x, 64, z));
         if (biome.is(net.minecraft.tags.BiomeTags.IS_OCEAN)
@@ -772,7 +925,7 @@ public class ExplorationManager extends SavedData {
                 || biome.is(net.minecraft.tags.BiomeTags.IS_DEEP_OCEAN)) return null;
 
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        if (y < 63) return null;
+        if (y < level.getSeaLevel() || y+7 >= level.getMaxBuildHeight()) return null;
         BlockPos position = new BlockPos(x, y, z);
         return isAreaClear(level, position) ? position : null;
     }
@@ -791,9 +944,9 @@ public class ExplorationManager extends SavedData {
         BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
         for (int dx = -7; dx <= 7; dx++) {
             for (int dz = -7; dz <= 7; dz++) {
-                for (int dy = 0; dy <= 5; dy++) {
+                for (int dy = -1; dy <= 5; dy++) {
                     m.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    if (level.getBlockState(m).isSolid()) {
+                    if ((dy>=0&&level.getBlockState(m).isSolid()) || !level.getBlockState(m).getFluidState().isEmpty() || level.getBlockEntity(m)!=null) {
                         return false;
                     }
                 }
@@ -899,7 +1052,7 @@ public class ExplorationManager extends SavedData {
             for (int x = hallPos.getX() - 20; x <= hallPos.getX() + 20; x++) {
                 for (int z = hallPos.getZ() - 20; z <= hallPos.getZ() + 20; z++) {
                     BlockPos penOrigin = new BlockPos(x, y, z);
-                    if (isValidAnimalReturnPen(level, penOrigin)) {
+                    if (ExplorationTerrain.loaded(level,penOrigin) && ExplorationTerrain.loaded(level,penOrigin.offset(3,0,3)) && isValidAnimalReturnPen(level, penOrigin)) {
                         return Optional.of(penOrigin);
                     }
                 }
@@ -930,18 +1083,19 @@ public class ExplorationManager extends SavedData {
         return true;
     }
 
-    private void returnLeashedAnimals(ServerLevel overworld, BlockPos penOrigin, BlockPos fallbackOrigin, List<Mob> animalsToReturn) {
+    private boolean returnLeashedAnimals(ServerLevel overworld, BlockPos penOrigin, BlockPos fallbackOrigin, List<Mob> animalsToReturn) {
         List<BlockPos> returnSpots = penOrigin != null && isValidAnimalReturnPen(overworld, penOrigin)
                 ? getAnimalReturnPenSpots(penOrigin)
                 : getFallbackAnimalReturnSpots(overworld, fallbackOrigin);
         int index = 0;
         for (Mob mob : animalsToReturn) {
             BlockPos target = returnSpots.get(index++ % returnSpots.size());
-            mob.dropLeash(true, false);
             CompoundTag entityData = new CompoundTag();
             mob.saveWithoutId(entityData);
+            entityData.remove("Leash");
 
             Entity recreated = mob.getType().create(overworld);
+            if(recreated==null){LOGGER.warn("Animal conservé au camp : création impossible pour {}",mob.getType());return false;}
             if (recreated != null) {
                 recreated.load(entityData);
                 recreated.setUUID(UUID.randomUUID());
@@ -950,11 +1104,14 @@ public class ExplorationManager extends SavedData {
                 if (recreated instanceof Mob recreatedMob) {
                     recreatedMob.setPersistenceRequired();
                 }
-                overworld.addFreshEntity(recreated);
+                if(!overworld.addFreshEntity(recreated)){
+                    LOGGER.warn("Animal {} conservé au camp : accueil refusé par le monde de retour",mob.getUUID());return false;
+                }
                 overworld.sendParticles(ParticleTypes.HAPPY_VILLAGER, target.getX() + 0.5D, target.getY() + 1.4D, target.getZ() + 0.5D, 8, 0.35D, 0.45D, 0.35D, 0.03D);
             }
-            mob.discard();
+            mob.dropLeash(true,false);mob.discard();
         }
+        return true;
     }
 
     private List<BlockPos> getAnimalReturnPenSpots(BlockPos penOrigin) {
@@ -1000,11 +1157,18 @@ public class ExplorationManager extends SavedData {
 
     public enum ExplorationState {
         COUNTDOWN,
-        TELEPORTING
+        TELEPORTING,
+        FAILED
     }
 
     public static class PendingExploration {
         public String paymentKey="";
+        public final Set<UUID> invited=new HashSet<>();
+        public final Map<BlockPos,net.minecraft.world.level.block.state.BlockState> campOriginals=new HashMap<>();
+        private transient ChunkPreparation terrain;
+        private transient CampConstruction construction;
+        private BlockPos campPos;
+        private String failureReason="Départ à vérifier";
         private int searchCandidate;
         public BlockPos origin;
         public int ticksRemaining;
@@ -1049,9 +1213,13 @@ public class ExplorationManager extends SavedData {
             }
             this.paidAmount = tag.getInt("PaidAmount");
             this.paymentKey=tag.getString("PaymentKey");
+            for(Tag raw:tag.getList("Invited",Tag.TAG_STRING))try{invited.add(UUID.fromString(raw.getAsString()));}catch(IllegalArgumentException ignored){}
+            if(tag.contains("CampPos"))campPos=BlockPos.of(tag.getLong("CampPos"));
+            if(tag.contains("FailureReason"))failureReason=tag.getString("FailureReason");
+            readStates(tag,"CampOriginals",campOriginals);
             this.searchCandidate = Math.max(0, Math.min(SEARCH_CANDIDATES, tag.getInt("SearchCandidate")));
             if (tag.contains("State")) {
-                this.state = ExplorationState.valueOf(tag.getString("State"));
+                try { this.state = ExplorationState.valueOf(tag.getString("State")); } catch(IllegalArgumentException invalid) {this.state=ExplorationState.FAILED;}
             }
             if (tag.hasUUID("DisplayUUID")) {
                 this.displayUUID = tag.getUUID("DisplayUUID");
@@ -1089,6 +1257,9 @@ public class ExplorationManager extends SavedData {
             if (animalReturnPen != null) tag.putLong("AnimalReturnPen", animalReturnPen.asLong());
             tag.putInt("PaidAmount", paidAmount);
             tag.putString("PaymentKey",paymentKey);
+            ListTag invitedTag=new ListTag();invited.forEach(id->invitedTag.add(net.minecraft.nbt.StringTag.valueOf(id.toString())));tag.put("Invited",invitedTag);
+            if(campPos!=null)tag.putLong("CampPos",campPos.asLong());
+            tag.putString("FailureReason",failureReason);tag.put("CampOriginals",writeStates(campOriginals));
             tag.putInt("SearchCandidate", searchCandidate);
             tag.putString("State", state.name());
             if (displayUUID != null) tag.putUUID("DisplayUUID", displayUUID);
@@ -1113,6 +1284,9 @@ public class ExplorationManager extends SavedData {
     
     public static class ActiveExploration {
         public UUID id = UUID.randomUUID();
+        public final Map<BlockPos,net.minecraft.world.level.block.state.BlockState> originalStates=new HashMap<>();
+        private transient ChunkPreparation returnOrigin,returnCamp;
+        private transient long returnRetry;
         public final Set<UUID> participants = new HashSet<>();
         public BlockPos spawnPos;
         public int ticksRemaining;
@@ -1137,6 +1311,7 @@ public class ExplorationManager extends SavedData {
         }
         
         public ActiveExploration(CompoundTag tag) {
+            readStates(tag,"OriginalStates",originalStates);
             if (tag.hasUUID("ExpeditionId")) this.id = tag.getUUID("ExpeditionId");
             else this.id = UUID.nameUUIDFromBytes(("legacy-exploration:" + tag.getLong("Origin") + ":" + tag.getLong("SpawnPos"))
                     .getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -1177,6 +1352,7 @@ public class ExplorationManager extends SavedData {
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("ExpeditionId", id);
+            tag.put("OriginalStates",writeStates(originalStates));
             ListTag members = new ListTag();
             for (UUID participant : participants) members.add(net.minecraft.nbt.StringTag.valueOf(participant.toString()));
             tag.put("Participants", members);
@@ -1235,12 +1411,14 @@ public class ExplorationManager extends SavedData {
         for (long position : tag.getLongArray("CleanupBlocks")) {
             manager.cleanupBlocks.addLast(BlockPos.of(position));
         }
+        readStates(tag,"CleanupRestore",manager.cleanupRestore);
         return manager;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag) {
         tag.putInt("NextX", nextExplorationX);
+        tag.put("CleanupRestore",writeStates(cleanupRestore));
         
         ListTag pendingList = new ListTag();
         for (PendingExploration explo : pendingExplorations) {

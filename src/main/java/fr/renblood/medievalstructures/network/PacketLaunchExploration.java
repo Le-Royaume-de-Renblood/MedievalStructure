@@ -40,6 +40,13 @@ public class PacketLaunchExploration {
             if (player != null && player.level() instanceof ServerLevel serverLevel) {
                 BlockEntity be = serverLevel.getBlockEntity(msg.pos);
                 if (be instanceof ExplorationHallBlockEntity hall && hall.hasExplorationReady()) {
+                    if(serverLevel!=player.server.overworld()){player.sendSystemMessage(Component.literal("Le hall de départ doit être dans le monde principal."));return;}
+                    if(hall.getSavedConfigs().size()>10||hall.getSavedConfigs().stream().anyMatch(c->c.playerUUID==null||c.status!=PacketExplorationAction.InvitationStatus.ACCEPTED)){
+                        player.sendSystemMessage(Component.literal("Tous les invités doivent accepter avant le départ."));return;
+                    }
+                    if(hall.getSavedConfigs().stream().map(c->c.playerUUID).distinct().count()!=hall.getSavedConfigs().size()){
+                        player.sendSystemMessage(Component.literal("Un joueur ne peut figurer deux fois dans l’expédition."));return;
+                    }
                     if (!player.blockPosition().closerThan(msg.pos, 8.0D)) {
                         player.sendSystemMessage(Component.literal("Vous êtes trop loin du hall d'exploration.").withStyle(net.minecraft.ChatFormatting.RED));
                         return;
@@ -96,11 +103,20 @@ public class PacketLaunchExploration {
                         }
                     }
                     
-                    if(cost<1){player.sendSystemMessage(Component.literal("Le tarif de cette exploration doit être vérifié."));return;}
+
                     final BlockPos returnPen=animalReturnPen.orElse(null);
                     final int duration=hall.getSavedDuration();
                     final String configSnapshot=hall.getSavedConfigs().toString();
                     final String paymentKey=java.util.UUID.randomUUID().toString();
+                    if(cost==0){
+                        ExplorationManager manager=ExplorationManager.get(serverLevel);
+                        Map<String,List<BlockPos>> chests=ExplorationUtils.assignAndRenameChests(serverLevel,msg.pos,hall.getSavedConfigs());
+                        manager.startCountdown(serverLevel,msg.pos,duration,hall.getSavedConfigs().size(),totalAnimals,returnPen,0,chests,
+                            ExplorationProgression.shouldSpawnBeds(player),ExplorationProgression.shouldSpawnLodestone(player),player.getUUID());
+                        manager.setInvited(msg.pos,player.getUUID(),hall.getSavedConfigs().stream().map(c->c.playerUUID).toList());
+                        manager.recordPayment(msg.pos,player.getUUID(),"free:"+paymentKey);hall.clearExploration();manager.persist(serverLevel);
+                        player.sendSystemMessage(Component.literal("Départ préparé : cette formule est gratuite.").withStyle(net.minecraft.ChatFormatting.GREEN));return;
+                    }
                     fr.renblood.medievalstructures.integration.CommerceAdapter.settle(player,paymentKey,"explorations",null,"Expéditions","EXPLORATION",
                         "launch:"+cost,cost,1,false,()->{
                             ExplorationManager manager=ExplorationManager.get(serverLevel);
@@ -109,6 +125,7 @@ public class PacketLaunchExploration {
                             Map<String,List<BlockPos>> chests=ExplorationUtils.assignAndRenameChests(serverLevel,msg.pos,hall.getSavedConfigs());
                             manager.startCountdown(serverLevel,msg.pos,duration,hall.getSavedConfigs().size(),totalAnimals,returnPen,cost,chests,
                                 ExplorationProgression.shouldSpawnBeds(player),ExplorationProgression.shouldSpawnLodestone(player),player.getUUID());
+                            manager.setInvited(msg.pos,player.getUUID(),hall.getSavedConfigs().stream().map(c->c.playerUUID).toList());
                             manager.recordPayment(msg.pos,player.getUUID(),paymentKey);hall.clearExploration();return true;
                         },()->ExplorationManager.get(serverLevel).persist(serverLevel)).whenComplete((receipt,failure)->player.getServer().execute(()->{
                             player.sendSystemMessage(Component.literal(failure==null?"Exploration préparée. Paiement bancaire enregistré.":"Exploration en attente : vérifiez le reçu avant de recommencer."));

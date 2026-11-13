@@ -26,6 +26,7 @@ public class ExplorationUtils {
                 for (int y = -5; y <= 3; y++) {
                     if (x == 0 && y == 0 && z == 0) continue;
                     BlockPos p = center.offset(x, y, z);
+                    if(!fr.renblood.medievalstructures.manager.ExplorationTerrain.loaded(level,p))continue;
                     BlockState state = level.getBlockState(p);
                     if (state.getBlock() instanceof ChestBlock) {
                         chests.add(p);

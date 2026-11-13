@@ -38,8 +38,16 @@ public class PacketCancelExploration {
                     
                     ExplorationManager manager=ExplorationManager.get(serverLevel);
                     ExplorationManager.PendingExploration pending=manager.pendingPayment(msg.pos,player.getUUID());
+                    if(pending==null&&hall.hasExplorationReady()&&player.blockPosition().closerThan(msg.pos,8.0D)
+                            &&!hall.getSavedConfigs().isEmpty()&&player.getUUID().equals(hall.getSavedConfigs().get(0).playerUUID)){
+                        hall.clearExploration();player.sendSystemMessage(Component.literal("Préparation effacée. Aucun paiement n’avait été effectué."));return;
+                    }
                     if(pending==null||pending.paymentKey.isBlank()||!player.blockPosition().closerThan(msg.pos,8.0D)){
                         player.sendSystemMessage(Component.literal("Seul le payeur peut annuler son départ en préparation."));return;
+                    }
+                    if(pending.paidAmount==0&&pending.paymentKey.startsWith("free:")){
+                        manager.cancelCountdown(serverLevel,msg.pos);manager.persist(serverLevel);
+                        player.sendSystemMessage(Component.literal("Départ gratuit annulé. Aucun débit bancaire."));return;
                     }
                     fr.renblood.medievalstructures.integration.CommerceAdapter.refund(player,"refund:"+pending.paymentKey,"explorations",pending.paymentKey,()->{
                         if(manager.pendingPayment(msg.pos,player.getUUID())!=pending)return false;

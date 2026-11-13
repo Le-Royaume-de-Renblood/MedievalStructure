@@ -1,4 +1,5 @@
 package fr.renblood.medievalstructures.network;
+import fr.renblood.medievalstructures.manager.ExplorationManager;
 
 import fr.renblood.medievalstructures.block.entity.ExplorationHallBlockEntity;
 import fr.renblood.medievalstructures.integration.MedievalCoinsIntegration;
@@ -54,6 +55,7 @@ public class PacketSaveExploration {
         BlockPos pos = buf.readBlockPos();
         int duration = buf.readInt();
         int size = buf.readInt();
+        if(size<1||size>10)throw new IllegalArgumentException("Expedition party size");
         List<PacketExplorationAction.PlayerConfig> configs = new ArrayList<>();
         for (int i = 0; i < size; i++) {
             int chests = buf.readInt();
@@ -84,6 +86,13 @@ public class PacketSaveExploration {
                         player.sendSystemMessage(Component.literal("Configuration d'exploration invalide ou joueur trop éloigné.").withStyle(ChatFormatting.RED));
                         return;
                     }
+                    if(serverLevel!=player.server.overworld()||ExplorationManager.get(serverLevel).isCountdownActive(msg.pos)){
+                        player.sendSystemMessage(Component.literal("Ce hall a déjà un départ ou une expédition en cours, ou n’est pas dans le monde principal."));return;
+                    }
+                    var names=new java.util.HashSet<String>();
+                    for(var config:msg.playerConfigs)if(config.playerName==null||config.playerName.isBlank()||!names.add(config.playerName.toLowerCase(java.util.Locale.ROOT))){
+                        player.sendSystemMessage(Component.literal("Indique un pseudo différent pour chaque participant."));return;
+                    }
                     if (MedievalCoinsIntegration.getExplorerXP(player) < 0) {
                         player.sendSystemMessage(Component.literal("Il faut etre explorateur pour preparer une exploration.").withStyle(ChatFormatting.RED));
                         return;
@@ -105,6 +114,7 @@ public class PacketSaveExploration {
                                 config.playerUUID = target.getUUID();
                                 config.status = PacketExplorationAction.InvitationStatus.PENDING;
                             } else {
+                                config.playerUUID=null;
                                 config.status = PacketExplorationAction.InvitationStatus.PENDING;
                             }
                         }

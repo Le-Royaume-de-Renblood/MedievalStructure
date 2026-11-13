@@ -49,6 +49,13 @@ minecraft {
     // si vous utilisez un projet multi-modules, mais ici on va utiliser un fichier JAR local.
 
     runs {
+        gameTestServer {
+            workingDirectory project.file('run-exploration-tests')
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${projectDir}/build/createSrgToMcp/output.srg"
+            mods { "${mod_id}" { source sourceSets.main } }
+        }
         client {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'

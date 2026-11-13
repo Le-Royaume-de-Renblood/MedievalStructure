@@ -60,6 +60,7 @@ public class ExplorationEventHandler {
         if (!event.isWasDeath()) return;
         var previous = event.getOriginal().getPersistentData();
         var current = event.getEntity().getPersistentData();
+        if(previous.contains(ExplorationManager.PREVIOUS_SPAWN))current.put(ExplorationManager.PREVIOUS_SPAWN,previous.getCompound(ExplorationManager.PREVIOUS_SPAWN).copy());
         if (previous.hasUUID(EXPLORATION_ID)) current.putUUID(EXPLORATION_ID, previous.getUUID(EXPLORATION_ID));
         if (previous.contains(EXPLORATION_ORIGIN)) current.putLong(EXPLORATION_ORIGIN, previous.getLong(EXPLORATION_ORIGIN));
 
@@ -80,6 +81,10 @@ public class ExplorationEventHandler {
 
         if (player.getPersistentData().getBoolean(EXPLORATION_BED_RESPAWN)) {
             if (!player.level().dimension().equals(ModDimensions.EXPLORATION_LEVEL_KEY)) {
+                if(player.getPersistentData().contains(EXPLORATION_ORIGIN)){
+                    ExplorationManager.get(player.server.overworld()).returnPlayerToHall(player,BlockPos.of(player.getPersistentData().getLong(EXPLORATION_ORIGIN)));return;
+                }
+                ExplorationManager.restoreRespawn(player);
                 player.getPersistentData().remove(EXPLORATION_ID);
                 player.getPersistentData().remove(EXPLORATION_ORIGIN);
                 player.getPersistentData().remove(EXPLORATION_BED_RESPAWN);
@@ -93,22 +98,8 @@ public class ExplorationEventHandler {
             return;
         }
 
-        player.getPersistentData().remove(DIED_IN_EXPLORATION);
-        player.getPersistentData().remove(EXPLORATION_ID);
-        player.sendSystemMessage(Component.literal("La mort vous ramene au hall d'exploration."));
-
-        BlockPos origin = null;
-        if (player.getPersistentData().contains(EXPLORATION_ORIGIN)) {
-            origin = BlockPos.of(player.getPersistentData().getLong(EXPLORATION_ORIGIN));
-            player.getPersistentData().remove(EXPLORATION_ORIGIN);
-        }
-
-        ServerLevel overworld = player.server.overworld();
-        if (origin != null) {
-            player.teleportTo(overworld, origin.getX() + 0.5, origin.getY() + 1, origin.getZ() + 0.5, 0, 0);
-        } else {
-            BlockPos spawn = overworld.getSharedSpawnPos();
-            player.teleportTo(overworld, spawn.getX(), spawn.getY(), spawn.getZ(), 0, 0);
-        }
+        BlockPos origin=player.getPersistentData().contains(EXPLORATION_ORIGIN)
+                ?BlockPos.of(player.getPersistentData().getLong(EXPLORATION_ORIGIN)):player.server.overworld().getSharedSpawnPos();
+        ExplorationManager.get(player.server.overworld()).returnPlayerToHall(player,origin);
     }
 }
