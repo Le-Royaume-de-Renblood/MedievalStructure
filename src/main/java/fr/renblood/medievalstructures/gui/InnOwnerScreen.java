@@ -69,6 +69,7 @@ public class InnOwnerScreen extends AdaptiveEconomyScreen<InnOwnerMenu> {
             addRenderableWidget(amountBox);
             payRentButton = addRenderableWidget(new ModernInnButton(x + 154, y + 149, 118, 24, Component.literal("Payer"), this::onPayRent, ModernInnButton.Style.SUCCESS));
         }
+        if(isOwner()||isEmployee()) addRenderableWidget(new ModernInnButton(x+22,y+260,130,24,Component.literal("Carnet marchand"),button->{if(Minecraft.getInstance().player!=null)Minecraft.getInstance().player.connection.sendCommand("mc marchand");},ModernInnButton.Style.SECONDARY));
         updateButtonState();
     }
 
