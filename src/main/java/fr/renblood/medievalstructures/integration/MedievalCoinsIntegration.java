@@ -17,6 +17,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class MedievalCoinsIntegration {
+    private static final java.lang.reflect.Method FORMAT_MONEY = findMoneyFormatter();
+    private static java.lang.reflect.Method findMoneyFormatter() {
+        try{return MedievalCoinsAPI.class.getMethod("formatMoney",long.class);}
+        catch(ReflectiveOperationException olderVersion){return null;}
+    }
+
 
     public static void addMoney(ServerPlayer player, double amount) {
         MedievalCoinsAPI.addMoney(player, (int) amount);
@@ -116,7 +122,7 @@ public class MedievalCoinsIntegration {
 
     public static String formatMoney(long amount) {
         try {
-            Object result = MedievalCoinsAPI.class.getMethod("formatMoney", long.class).invoke(null, amount);
+            Object result = FORMAT_MONEY == null ? null : FORMAT_MONEY.invoke(null, amount);
             if (result instanceof String value) return value;
         } catch (ReflectiveOperationException ignored) {
         }

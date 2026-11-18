@@ -16,6 +16,7 @@ public class ServerTickHandler {
         if (event.phase == TickEvent.Phase.END && event.getServer().overworld() != null) {
             ExplorationManager.get(event.getServer().overworld()).tick(event.getServer());
             InnCustomerManager.tick(event.getServer());
+            fr.renblood.medievalstructures.manager.RoomCreationManager.getInstance().tick(event.getServer());
         }
     }
 }

@@ -11,13 +11,25 @@ public final class NpcShopkeeperIntegration {
     private static final String API_CLASS = "fr.renblood.npcshopkeeper.api.NpcShopkeeperAPI";
     private static final String REQUEST_CLASS = "fr.renblood.npcshopkeeper.api.NpcShopkeeperAPI$InnCustomerRequest";
 
+    // Resolve optional API signatures once. Route presence and spawn capacity remain live queries.
+    private static final class InnBridge {
+        static final Class<?> API = type(API_CLASS), REQUEST = type(REQUEST_CLASS);
+        static final Method HAS_ROUTE = method("hasCommercialRoute", String.class);
+        static final Method CLEAR = method("clearInnCustomers", ServerLevel.class, String.class);
+        static final Method SPAWN = REQUEST == null ? null : method("spawnInnCustomer", ServerLevel.class, String.class, REQUEST);
+        static final Constructor<?> REQUEST_CONSTRUCTOR = constructor();
+        private static Class<?> type(String name) { try{return Class.forName(name);}catch(ClassNotFoundException absent){return null;} }
+        private static Method method(String name,Class<?>... args) { if(API==null)return null;try{return API.getMethod(name,args);}catch(ReflectiveOperationException absent){return null;} }
+        private static Constructor<?> constructor() { if(REQUEST==null)return null;try{return REQUEST.getConstructor(String.class,String.class,String.class,long.class,String.class);}catch(ReflectiveOperationException absent){return null;} }
+    }
+
     private NpcShopkeeperIntegration() {
     }
 
     public static boolean hasRoute(String routeId) {
         try {
-            Class<?> api = Class.forName(API_CLASS);
-            Method method = api.getMethod("hasCommercialRoute", String.class);
+            Method method = InnBridge.HAS_ROUTE;
+            if(method==null)return false;
             Object result = method.invoke(null, routeId);
             return Boolean.TRUE.equals(result);
         } catch (ReflectiveOperationException ignored) {
@@ -92,11 +104,10 @@ public final class NpcShopkeeperIntegration {
     public static String trySpawnInnCustomer(ServerLevel level, String routeId, String innName, String itemId,
                                            String itemDisplayName, long price, String type) {
         try {
-            Class<?> api = Class.forName(API_CLASS);
-            Class<?> requestClass = Class.forName(REQUEST_CLASS);
-            Constructor<?> constructor = requestClass.getConstructor(String.class, String.class, String.class, long.class, String.class);
+            Method method = InnBridge.SPAWN;
+            Constructor<?> constructor = InnBridge.REQUEST_CONSTRUCTOR;
+            if(method==null||constructor==null)return "UNAVAILABLE";
             Object request = constructor.newInstance(innName, itemId, itemDisplayName, price, type);
-            Method method = api.getMethod("spawnInnCustomer", ServerLevel.class, String.class, requestClass);
             Object result = method.invoke(null, level, routeId, request);
             return result == null ? "UNAVAILABLE" : result.toString();
         } catch (ReflectiveOperationException ignored) {
@@ -106,8 +117,8 @@ public final class NpcShopkeeperIntegration {
 
     public static int clearInnCustomers(ServerLevel level, String innName) {
         try {
-            Class<?> api = Class.forName(API_CLASS);
-            Method method = api.getMethod("clearInnCustomers", ServerLevel.class, String.class);
+            Method method = InnBridge.CLEAR;
+            if(method==null)return 0;
             Object result = method.invoke(null, level, innName);
             return result instanceof Number number ? number.intValue() : 0;
         } catch (ReflectiveOperationException ignored) {
